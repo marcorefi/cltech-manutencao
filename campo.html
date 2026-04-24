@@ -716,6 +716,10 @@
         }
       });
 
+      // Sempre registra a data atual como data da manutenção
+      const hoje = new Date().toISOString().substring(0, 10);
+      if (HEADERS_PONTO.indexOf('DATA MANUTENÇÃO') !== -1) campos['DATA MANUTENÇÃO'] = hoje;
+
       const payload = {
         contratoId: CONTRATO_ATUAL.id,
         pointName: PONTO_ATUAL['POINT NAME'],
