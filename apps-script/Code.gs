@@ -54,7 +54,6 @@ function doPost(e) {
 function handleRequest(e, method) {
   try {
     const params = e.parameter || {};
-    const action = params.action || '';
     let body = {};
 
     if (method === 'POST' && e.postData && e.postData.contents) {
@@ -65,8 +64,9 @@ function handleRequest(e, method) {
       }
     }
 
-    // Merge query params with body
+    // Merge query params with body (body prioridade)
     const data = Object.assign({}, params, body);
+    const action = data.action || '';
 
     // Roteamento por ação
     let result;
