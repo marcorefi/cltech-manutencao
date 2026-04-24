@@ -276,10 +276,10 @@
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
       });
 
-      const pisos = eq.byPiso || {};
+      const pisosDash = eq.byPiso || {};
       CHART_EQUIP_TIPO = new Chart(document.getElementById('chartEquipTipo').getContext('2d'), {
         type: 'bar',
-        data: { labels: Object.keys(pisos), datasets: [{ label: 'Equipamentos', data: Object.values(pisos), backgroundColor: '#C0392B' }] },
+        data: { labels: Object.keys(pisosDash), datasets: [{ label: 'Equipamentos', data: Object.values(pisosDash), backgroundColor: '#C0392B' }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
       });
 
