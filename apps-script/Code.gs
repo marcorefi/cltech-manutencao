@@ -128,6 +128,15 @@ function handleRequest(e, method) {
       case 'adicionarPonto':
         result = handleAdicionarPonto(data);
         break;
+      case 'bulkInserirPontos':
+        result = handleBulkInserirPontos(data);
+        break;
+      case 'initContratoSheet':
+        result = handleInitContratoSheet(data);
+        break;
+      case 'notificacoes':
+        result = handleNotificacoes(data);
+        break;
       case 'dashboard':
         result = handleDashboard(data);
         break;
@@ -805,6 +814,124 @@ function handleSalvarPonto(data) {
   });
 
   return { ok: true, alteracoes: alteracoes, fotoUrl: fotoUrl };
+}
+
+function handleInitContratoSheet(data) {
+  const session = validateToken(data.token);
+  const perm = requirePerfil(session, ['supervisor']);
+  if (!perm.ok) return perm;
+
+  const contrato = findContrato(data.contratoId);
+  if (!contrato) return { ok: false, error: 'Contrato não encontrado' };
+
+  const ss = SpreadsheetApp.openById(contrato.planilhaId);
+  let sheet = ss.getSheetByName(contrato.abaDados);
+  const headers = data.headers || [];
+  if (!headers.length) return { ok: false, error: 'Headers obrigatórios' };
+
+  if (!sheet) {
+    sheet = ss.insertSheet(contrato.abaDados);
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#0D1B2A').setFontColor('#FFFFFF');
+    sheet.setFrozenRows(1);
+    return { ok: true, created: true };
+  }
+  // Se existe e está vazia (apenas headers), não faz nada
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#0D1B2A').setFontColor('#FFFFFF');
+    sheet.setFrozenRows(1);
+  }
+  return { ok: true, created: false };
+}
+
+function handleBulkInserirPontos(data) {
+  const session = validateToken(data.token);
+  const perm = requirePerfil(session, ['supervisor', 'gestao']);
+  if (!perm.ok) return perm;
+
+  const contrato = findContrato(data.contratoId);
+  if (!contrato) return { ok: false, error: 'Contrato não encontrado' };
+
+  const ss = SpreadsheetApp.openById(contrato.planilhaId);
+  const sheet = ss.getSheetByName(contrato.abaDados);
+  if (!sheet) return { ok: false, error: 'Aba não encontrada' };
+
+  const headers = sheet.getDataRange().getValues()[0];
+  const pontos = data.pontos || [];
+  if (!pontos.length) return { ok: false, error: 'Nenhum ponto enviado' };
+
+  const rows = pontos.map(function(p) {
+    return headers.map(function(h) { return p[h] !== undefined ? p[h] : ''; });
+  });
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+  return { ok: true, inseridos: rows.length };
+}
+
+function handleNotificacoes(data) {
+  const session = validateToken(data.token);
+  if (!session.ok) return session;
+
+  const user = findUser(session.email);
+  const userContratos = (user.contratos || '').toString();
+  const allowedAll = userContratos === '*' || session.perfil === 'supervisor' || session.perfil === 'gestao';
+  const allowedList = userContratos.split(',').map(function(s) { return s.trim(); });
+
+  const ss = SpreadsheetApp.openById(MASTER_SHEET_ID);
+  const contratosSheet = ss.getSheetByName(SHEET_CONTRATOS);
+  const contratos = contratosSheet.getDataRange().getValues().slice(1).filter(function(r) {
+    return r[7] === 'SIM' && (allowedAll || allowedList.indexOf(r[0]) !== -1);
+  });
+
+  const hoje = new Date();
+  const alertas = [];
+
+  contratos.forEach(function(c) {
+    const contratoId = c[0];
+    const contratoNome = c[1];
+    const tipoContrato = c[3];
+    const planilhaId = c[4];
+    const abaDados = c[5];
+
+    try {
+      const dataSheet = SpreadsheetApp.openById(planilhaId).getSheetByName(abaDados);
+      if (!dataSheet) return;
+      const values = dataSheet.getDataRange().getValues();
+      if (values.length < 2) return;
+      const headers = values[0];
+
+      if (tipoContrato === 'B') {
+        const nameIdx = headers.indexOf('POINT NAME');
+        const proxIdx = headers.indexOf('DATA PRÓX MANUTENÇÃO');
+        const visitaIdx = headers.indexOf('VISITA');
+        if (nameIdx < 0) return;
+        for (let i = 1; i < values.length; i++) {
+          const prox = values[i][proxIdx];
+          if (!prox) continue;
+          const proxDate = new Date(prox);
+          if (isNaN(proxDate)) continue;
+          const diff = Math.floor((proxDate - hoje) / (1000 * 60 * 60 * 24));
+          if (diff < 0) {
+            alertas.push({ contratoId: contratoId, contratoNome: contratoNome, identificador: values[i][nameIdx], tipo: 'vencida', diasAtraso: -diff, data: proxDate.toISOString().substring(0,10) });
+          } else if (diff <= 15) {
+            alertas.push({ contratoId: contratoId, contratoNome: contratoNome, identificador: values[i][nameIdx], tipo: 'proxima', diasRestantes: diff, data: proxDate.toISOString().substring(0,10) });
+          }
+        }
+      } else if (tipoContrato === 'A') {
+        const statusIdx = headers.indexOf('STATUS');
+        const lucIdx = headers.indexOf('LUC');
+        const lojasIdx = headers.indexOf('LOJAS');
+        for (let i = 1; i < values.length; i++) {
+          const st = String(values[i][statusIdx] || '').toUpperCase();
+          if (st === 'ALARME') {
+            alertas.push({ contratoId: contratoId, contratoNome: contratoNome, identificador: values[i][lucIdx], nome: values[i][lojasIdx], tipo: 'alarme' });
+          }
+        }
+      }
+    } catch (e) {}
+  });
+
+  return { ok: true, alertas: alertas, total: alertas.length };
 }
 
 function handleAdicionarPonto(data) {
