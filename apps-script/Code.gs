@@ -19,7 +19,8 @@
 // CONFIGURAÇÃO
 // ========================================================================
 
-const MASTER_SHEET_ID = '12MFGQegCkrVJrMrdvUlYZeJpoj-3zQS-V6CbCuHtW2U';
+const MASTER_SHEET_ID = '1ZJi9BAvgmuT4B-I2M80qZ6lXO6sBR_A43HGlfz0nVXw';
+const PARANGABA_SHEET_ID = '12MFGQegCkrVJrMrdvUlYZeJpoj-3zQS-V6CbCuHtW2U';
 const DRIVE_ROOT_FOLDER_NAME = 'Fotos SDAI - Sistema Manutencao';
 const SESSION_TTL_HOURS = 8;
 
@@ -136,6 +137,12 @@ function handleRequest(e, method) {
         break;
       case 'notificacoes':
         result = handleNotificacoes(data);
+        break;
+      case 'migrarConfig':
+        result = migrarConfigParaNovaPlanilha(data);
+        break;
+      case 'limparConfigAntiga':
+        result = limparConfigAntiga(data);
         break;
       case 'dashboard':
         result = handleDashboard(data);
@@ -816,6 +823,65 @@ function handleSalvarPonto(data) {
   return { ok: true, alteracoes: alteracoes, fotoUrl: fotoUrl };
 }
 
+// Migra as abas CONFIG_* + HISTORICO da planilha Parangaba para uma nova planilha em pasta restrita
+function migrarConfigParaNovaPlanilha(data) {
+  const session = data ? validateToken(data.token) : null;
+  if (data && !session.ok) return session;
+  if (data && session.perfil !== 'supervisor') return { ok: false, error: 'Apenas supervisor pode migrar' };
+
+  // Buscar a pasta "DASHBOARD Manutenção - CLTECH" no Drive
+  const folderName = 'DASHBOARD Manutenção - CLTECH';
+  const folders = DriveApp.getFoldersByName(folderName);
+  if (!folders.hasNext()) return { ok: false, error: 'Pasta "' + folderName + '" não encontrada no Drive' };
+  const targetFolder = folders.next();
+
+  // Cria nova planilha
+  const newSS = SpreadsheetApp.create('CLTECH_Sistema_Config_Master_' + new Date().toISOString().substring(0,10));
+  const newFile = DriveApp.getFileById(newSS.getId());
+  newFile.moveTo(targetFolder);
+
+  // Copia abas de config + historico da planilha atual para a nova
+  const oldSS = SpreadsheetApp.openById(MASTER_SHEET_ID);
+  const toMigrate = [SHEET_USUARIOS, SHEET_CONTRATOS, SHEET_SESSOES, SHEET_HISTORICO];
+  const copiadas = [];
+
+  toMigrate.forEach(function(name) {
+    const old = oldSS.getSheetByName(name);
+    if (!old) return;
+    const copy = old.copyTo(newSS);
+    copy.setName(name);
+    copiadas.push(name);
+  });
+
+  // Remove a aba default "Página1"/"Sheet1" da nova planilha se existir e há outras abas
+  const sheets = newSS.getSheets();
+  if (sheets.length > 1) {
+    const first = sheets[0];
+    const nm = first.getName();
+    if (nm === 'Página1' || nm === 'Sheet1' || nm === 'Sheet 1') {
+      newSS.deleteSheet(first);
+    }
+  }
+
+  return { ok: true, newId: newSS.getId(), url: newSS.getUrl(), pasta: targetFolder.getName(), copiadas: copiadas };
+}
+
+// Remove as abas CONFIG_* + HISTORICO da planilha Parangaba (depois de migradas)
+function limparConfigAntiga(data) {
+  const session = data ? validateToken(data.token) : null;
+  if (data && !session.ok) return session;
+  if (data && session.perfil !== 'supervisor') return { ok: false, error: 'Apenas supervisor' };
+  const parangabaId = data.parangabaId || '12MFGQegCkrVJrMrdvUlYZeJpoj-3zQS-V6CbCuHtW2U';
+  const ss = SpreadsheetApp.openById(parangabaId);
+  const toDelete = [SHEET_USUARIOS, SHEET_CONTRATOS, SHEET_SESSOES, SHEET_HISTORICO];
+  const removidas = [];
+  toDelete.forEach(function(name) {
+    const s = ss.getSheetByName(name);
+    if (s) { ss.deleteSheet(s); removidas.push(name); }
+  });
+  return { ok: true, removidas: removidas };
+}
+
 function handleInitContratoSheet(data) {
   const session = validateToken(data.token);
   const perm = requirePerfil(session, ['supervisor']);
@@ -1007,7 +1073,7 @@ function dashboardTipoA(contrato, headers, rows) {
     if (moduloIdx >= 0 && String(r[moduloIdx] || '').toUpperCase() === 'SIM') comModulo++;
   });
 
-  return {
+  const result = {
     ok: true,
     tipoContrato: 'A',
     contrato: contrato,
@@ -1017,6 +1083,81 @@ function dashboardTipoA(contrato, headers, rows) {
     interligadas: interligadas,
     comModulo: comModulo,
     headers: headers
+  };
+
+  // Se existe a aba EQUIP SHOPPING na mesma planilha, adiciona KPIs de equipamentos
+  try {
+    const ss = SpreadsheetApp.openById(contrato.planilhaId);
+    const equipSheet = ss.getSheetByName('EQUIP SHOPPING');
+    if (equipSheet) {
+      result.equipamentos = dashboardEquipShopping(equipSheet);
+    }
+  } catch (e) {}
+
+  return result;
+}
+
+function dashboardEquipShopping(sheet) {
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return { total: 0 };
+  const headers = values[0];
+  const localIdx = headers.indexOf('LOCAL DE INSTALAÇÃO');
+  const pisoIdx = headers.indexOf('PISO');
+  const tipoIdx = headers.indexOf('TIPO DISP');
+  const idIdx = headers.indexOf('ID');
+  const dataIdx = headers.indexOf('DATA MANUT.');
+  const obsIdx = headers.findIndex(function(h) { return String(h).toUpperCase().indexOf('OBS') === 0; });
+
+  const equipamentos = [];
+  let categoriaAtual = '';
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    const local = String(r[localIdx] || '').trim();
+    const piso = String(r[pisoIdx] || '').trim();
+    // Linha de categoria: tem LOCAL mas sem PISO e sem TIPO
+    if (local && !piso && !r[tipoIdx]) {
+      categoriaAtual = local;
+      continue;
+    }
+    if (!local) continue;
+    equipamentos.push({
+      local: local,
+      piso: piso,
+      tipo: String(r[tipoIdx] || '').trim(),
+      id: String(r[idIdx] || '').trim(),
+      data: r[dataIdx],
+      obs: obsIdx >= 0 ? String(r[obsIdx] || '').trim() : '',
+      categoria: categoriaAtual
+    });
+  }
+
+  const byCategoria = {};
+  const byTipo = {};
+  const byPiso = {};
+  let semManutencao = 0;
+  let manutMaisDeSeisMeses = 0;
+  const hoje = new Date();
+  const seis_meses_ms = 180 * 24 * 60 * 60 * 1000;
+
+  equipamentos.forEach(function(e) {
+    byCategoria[e.categoria] = (byCategoria[e.categoria] || 0) + 1;
+    byTipo[e.tipo || 'OUTROS'] = (byTipo[e.tipo || 'OUTROS'] || 0) + 1;
+    byPiso[e.piso || '-'] = (byPiso[e.piso || '-'] || 0) + 1;
+    if (!e.data) semManutencao++;
+    else {
+      const d = new Date(e.data);
+      if (!isNaN(d) && (hoje - d) > seis_meses_ms) manutMaisDeSeisMeses++;
+    }
+  });
+
+  return {
+    total: equipamentos.length,
+    byCategoria: byCategoria,
+    byTipo: byTipo,
+    byPiso: byPiso,
+    semManutencao: semManutencao,
+    manutMaisDeSeisMeses: manutMaisDeSeisMeses,
+    lista: equipamentos
   };
 }
 

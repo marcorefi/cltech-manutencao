@@ -7,7 +7,7 @@
   <title>Dashboard · CLTECH Fire</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
-  <link rel="stylesheet" href="assets/css/style.css?v=2">
+  <link rel="stylesheet" href="assets/css/style.css?v=3">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
@@ -90,21 +90,47 @@
     <!-- Tabela -->
     <div class="card">
       <div class="flex-between mb-md">
-        <h3>Registros completos</h3>
-        <input type="search" id="search" placeholder="Filtrar..." class="form-control" style="max-width:260px" oninput="filtrarTabela()">
+        <h3>Lojas (registros completos)</h3>
+        <input type="search" id="search" placeholder="Filtrar lojas..." class="form-control" style="max-width:260px" oninput="filtrarTabela()">
       </div>
       <div id="tabelaWrap"></div>
+    </div>
+
+    <!-- Seção EQUIPAMENTOS DO SHOPPING (só aparece se dados.equipamentos existir) -->
+    <div id="equipSection" class="hidden">
+      <div class="card" style="border-top: 4px solid var(--accent)">
+        <h2>🏢 Equipamentos do Shopping</h2>
+        <p class="text-muted" style="font-size:13px">KPIs independentes das lojas — detectores, acionadores, sirenes das áreas comuns.</p>
+      </div>
+      <div id="equipKpis"></div>
+      <div class="charts-grid">
+        <div class="card">
+          <h3>Por categoria</h3>
+          <div class="chart-container"><canvas id="chartEquipCat"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Por tipo / piso</h3>
+          <div class="chart-container"><canvas id="chartEquipTipo"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h3>Lista de equipamentos</h3>
+          <input type="search" id="searchEquip" placeholder="Buscar equipamento..." class="form-control" style="max-width:260px" oninput="filtrarEquipamentos()">
+        </div>
+        <div id="equipTabelaWrap"></div>
+      </div>
     </div>
   </div>
 
   <div id="lgpd"></div>
 
-  <script src="assets/js/config.js?v=2"></script>
-  <script src="assets/js/offline.js?v=2"></script>
-  <script src="assets/js/api.js?v=2"></script>
-  <script src="assets/js/auth.js?v=2"></script>
-  <script src="assets/js/utils.js?v=2"></script>
-  <script src="assets/js/sw-register.js?v=2"></script>
+  <script src="assets/js/config.js?v=3"></script>
+  <script src="assets/js/offline.js?v=3"></script>
+  <script src="assets/js/api.js?v=3"></script>
+  <script src="assets/js/auth.js?v=3"></script>
+  <script src="assets/js/utils.js?v=3"></script>
+  <script src="assets/js/sw-register.js?v=3"></script>
   <script>
     const session = AUTH.require(['supervisor', 'gestao']);
     if (!session) { throw new Error('no session'); }
@@ -172,6 +198,81 @@
       renderRanking();
       renderTabela();
       renderDatalist();
+      renderEquipamentos();
+    }
+
+    let EQUIPS = [];
+    let EQUIPS_FILT = [];
+    let CHART_EQUIP_CAT = null, CHART_EQUIP_TIPO = null;
+
+    function renderEquipamentos() {
+      const section = document.getElementById('equipSection');
+      if (!DADOS.equipamentos || !DADOS.equipamentos.total) {
+        section.classList.add('hidden');
+        return;
+      }
+      section.classList.remove('hidden');
+      const eq = DADOS.equipamentos;
+      EQUIPS = eq.lista || [];
+      EQUIPS_FILT = EQUIPS.slice();
+
+      // KPIs de equipamentos
+      document.getElementById('equipKpis').innerHTML = '<div class="kpi-grid">' +
+        kpiCard('Total equipamentos', eq.total, '') +
+        kpiCard('Categorias', Object.keys(eq.byCategoria || {}).length, '') +
+        kpiCard('Tipos distintos', Object.keys(eq.byTipo || {}).length, '') +
+        kpiCard('Sem manutenção', eq.semManutencao, eq.semManutencao > 0 ? 'alarme' : '') +
+        kpiCard('+ 6 meses sem manut.', eq.manutMaisDeSeisMeses, eq.manutMaisDeSeisMeses > 10 ? 'pendencia' : '') +
+      '</div>';
+
+      // Gráficos
+      if (CHART_EQUIP_CAT) CHART_EQUIP_CAT.destroy();
+      if (CHART_EQUIP_TIPO) CHART_EQUIP_TIPO.destroy();
+
+      const cat = eq.byCategoria || {};
+      CHART_EQUIP_CAT = new Chart(document.getElementById('chartEquipCat').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: Object.keys(cat), datasets: [{ data: Object.values(cat), backgroundColor: ['#2E86C1','#27AE60','#E67E22','#E74C3C','#D4AC0D','#839192','#C0392B','#8E44AD','#1ABC9C','#2C3E50'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+      });
+
+      const pisos = eq.byPiso || {};
+      CHART_EQUIP_TIPO = new Chart(document.getElementById('chartEquipTipo').getContext('2d'), {
+        type: 'bar',
+        data: { labels: Object.keys(pisos), datasets: [{ label: 'Equipamentos', data: Object.values(pisos), backgroundColor: '#C0392B' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      renderEquipTabela();
+    }
+
+    function filtrarEquipamentos() {
+      const q = document.getElementById('searchEquip').value.trim().toLowerCase();
+      EQUIPS_FILT = !q ? EQUIPS.slice() : EQUIPS.filter(e =>
+        String(e.local || '').toLowerCase().includes(q) ||
+        String(e.tipo || '').toLowerCase().includes(q) ||
+        String(e.id || '').toLowerCase().includes(q) ||
+        String(e.categoria || '').toLowerCase().includes(q)
+      );
+      renderEquipTabela();
+    }
+
+    function renderEquipTabela() {
+      const div = document.getElementById('equipTabelaWrap');
+      if (!EQUIPS_FILT.length) { div.innerHTML = '<p class="text-muted">Nenhum equipamento.</p>'; return; }
+      let html = '<div class="table-wrap"><table><thead><tr><th>Categoria</th><th>Local</th><th>Piso</th><th>Tipo</th><th>ID</th><th>Última manut.</th><th>Obs</th></tr></thead><tbody>';
+      EQUIPS_FILT.slice(0, 300).forEach(e => {
+        html += '<tr><td>' + Utils.escapeHtml(e.categoria) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.local) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.piso) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.tipo) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.id) + '</td>' +
+                '<td>' + (e.data ? Utils.formatDateOnly(e.data) : '-') + '</td>' +
+                '<td>' + Utils.escapeHtml(e.obs || '') + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      if (EQUIPS_FILT.length > 300) html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 300 de ' + EQUIPS_FILT.length + '.</p>';
+      div.innerHTML = html;
     }
 
     function kpiCard(label, value, cls) {

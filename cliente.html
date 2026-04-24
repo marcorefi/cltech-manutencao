@@ -7,7 +7,7 @@
   <title>Dashboard Cliente · CLTECH Fire</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
-  <link rel="stylesheet" href="assets/css/style.css?v=2">
+  <link rel="stylesheet" href="assets/css/style.css?v=3">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -36,21 +36,37 @@
 
     <div class="card">
       <div class="flex-between mb-md">
-        <h3>Registros</h3>
-        <input type="search" id="search" placeholder="Buscar..." class="form-control" style="max-width:260px" oninput="filtrarTabela()">
+        <h3 id="registrosTitulo">Lojas</h3>
+        <input type="search" id="search" placeholder="Buscar por LUC, nome..." class="form-control" style="max-width:260px" oninput="filtrarTabela()">
       </div>
       <div id="tabelaWrap"></div>
+    </div>
+
+    <!-- Seção EQUIPAMENTOS DO SHOPPING (somente leitura, aparece se contrato tem EQUIP SHOPPING) -->
+    <div id="equipSection" class="hidden">
+      <div class="card" style="border-top: 4px solid var(--accent)">
+        <h2>🏢 Equipamentos do Shopping</h2>
+        <p class="text-muted" style="font-size:13px">Detectores, acionadores e sirenes das áreas comuns do shopping.</p>
+      </div>
+      <div id="equipKpis"></div>
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h3>Lista de equipamentos</h3>
+          <input type="search" id="searchEquip" placeholder="Buscar equipamento..." class="form-control" style="max-width:260px" oninput="filtrarEquip()">
+        </div>
+        <div id="equipTabelaWrap"></div>
+      </div>
     </div>
   </div>
 
   <div id="lgpd"></div>
 
-  <script src="assets/js/config.js?v=2"></script>
-  <script src="assets/js/offline.js?v=2"></script>
-  <script src="assets/js/api.js?v=2"></script>
-  <script src="assets/js/auth.js?v=2"></script>
-  <script src="assets/js/utils.js?v=2"></script>
-  <script src="assets/js/sw-register.js?v=2"></script>
+  <script src="assets/js/config.js?v=3"></script>
+  <script src="assets/js/offline.js?v=3"></script>
+  <script src="assets/js/api.js?v=3"></script>
+  <script src="assets/js/auth.js?v=3"></script>
+  <script src="assets/js/utils.js?v=3"></script>
+  <script src="assets/js/sw-register.js?v=3"></script>
   <script>
     const session = AUTH.require(['cliente', 'supervisor', 'gestao']);
     if (!session) { throw new Error('no session'); }
@@ -122,6 +138,56 @@
       renderKPIs();
       renderCharts();
       renderTabela();
+      renderEquipamentos();
+    }
+
+    let EQUIPS = [];
+    let EQUIPS_FILT = [];
+
+    function renderEquipamentos() {
+      const section = document.getElementById('equipSection');
+      if (!DADOS.equipamentos || !DADOS.equipamentos.total) {
+        section.classList.add('hidden');
+        return;
+      }
+      section.classList.remove('hidden');
+      const eq = DADOS.equipamentos;
+      EQUIPS = eq.lista || [];
+      EQUIPS_FILT = EQUIPS.slice();
+
+      document.getElementById('equipKpis').innerHTML = '<div class="kpi-grid">' +
+        kpiCard('Total equipamentos', eq.total, '') +
+        kpiCard('Tipos distintos', Object.keys(eq.byTipo || {}).length, '') +
+        kpiCard('Sem manutenção', eq.semManutencao, eq.semManutencao > 0 ? 'alarme' : '') +
+        kpiCard('+ 6 meses', eq.manutMaisDeSeisMeses, eq.manutMaisDeSeisMeses > 10 ? 'pendencia' : '') +
+      '</div>';
+
+      renderEquipTabela();
+    }
+
+    function filtrarEquip() {
+      const q = document.getElementById('searchEquip').value.trim().toLowerCase();
+      EQUIPS_FILT = !q ? EQUIPS.slice() : EQUIPS.filter(e =>
+        String(e.local || '').toLowerCase().includes(q) ||
+        String(e.tipo || '').toLowerCase().includes(q) ||
+        String(e.id || '').toLowerCase().includes(q)
+      );
+      renderEquipTabela();
+    }
+
+    function renderEquipTabela() {
+      const div = document.getElementById('equipTabelaWrap');
+      if (!EQUIPS_FILT.length) { div.innerHTML = '<p class="text-muted">Nenhum equipamento.</p>'; return; }
+      let html = '<div class="table-wrap"><table><thead><tr><th>Local</th><th>Piso</th><th>Tipo</th><th>ID</th><th>Última manut.</th></tr></thead><tbody>';
+      EQUIPS_FILT.slice(0, 300).forEach(e => {
+        html += '<tr><td>' + Utils.escapeHtml(e.local) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.piso) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.tipo) + '</td>' +
+                '<td>' + Utils.escapeHtml(e.id) + '</td>' +
+                '<td>' + (e.data ? Utils.formatDateOnly(e.data) : '-') + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      div.innerHTML = html;
     }
 
     function renderKPIs() {
