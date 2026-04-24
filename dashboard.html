@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0D1B2A">
+  <title>Dashboard · CLTECH Fire</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    .progress-wrap { background: #e2e8f0; height: 24px; border-radius: 12px; overflow: hidden; margin-top: 10px; }
+    .progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary), var(--conforme)); color: #fff; text-align: center; font-size: 12px; font-weight: 700; line-height: 24px; transition: width 0.6s; }
+    .detail-card { border-left: 4px solid var(--primary); }
+    .indicator-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    .indicator { padding: 10px; background: #fafbfc; border-radius: 6px; }
+    .indicator .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
+    .indicator .val { font-weight: 700; color: var(--dark); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container">
+    <div class="mobile-nav">
+      <a href="supervisor.html">← Supervisor</a>
+      <a href="#" onclick="exportarCSV()">Exportar CSV</a>
+    </div>
+
+    <div class="card">
+      <div class="flex-between mb-md">
+        <div>
+          <h2 id="contratoNome">Dashboard</h2>
+          <p class="text-muted" style="font-size:13px" id="contratoSub"></p>
+        </div>
+        <div id="contratoSelectorWrap" class="hidden">
+          <select id="contratoSelect" class="form-control" style="max-width:260px"></select>
+        </div>
+      </div>
+    </div>
+
+    <div id="kpis"></div>
+
+    <!-- Progresso de interligação (Tipo A) / manutenção (Tipo B) -->
+    <div class="card" id="progressCard">
+      <h3 id="progressTitle">Progresso</h3>
+      <div class="progress-wrap">
+        <div id="progressBar" class="progress-bar" style="width:0%">0%</div>
+      </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="charts-grid">
+      <div class="card">
+        <h3 id="chart1Title">Distribuição</h3>
+        <div class="chart-container"><canvas id="chart1"></canvas></div>
+      </div>
+      <div class="card">
+        <h3 id="chart2Title">Por categoria</h3>
+        <div class="chart-container"><canvas id="chart2"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Busca individual -->
+    <div class="card">
+      <h3>Consulta individual</h3>
+      <div class="search-box" style="margin-top:10px">
+        <input type="search" id="searchInd" placeholder="Digite LUC, nome, POINT NAME..." list="searchDL" oninput="searchIndividual()">
+        <datalist id="searchDL"></datalist>
+      </div>
+      <div id="detailCard"></div>
+    </div>
+
+    <!-- Ranking / indicadores técnicos -->
+    <div class="charts-grid">
+      <div class="card">
+        <h3 id="rankingTitle">Indicadores técnicos</h3>
+        <div id="indicadoresTec"></div>
+      </div>
+      <div class="card">
+        <h3>Ranking de problemas</h3>
+        <div id="ranking"></div>
+      </div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="card">
+      <div class="flex-between mb-md">
+        <h3>Registros completos</h3>
+        <input type="search" id="search" placeholder="Filtrar..." class="form-control" style="max-width:260px" oninput="filtrarTabela()">
+      </div>
+      <div id="tabelaWrap"></div>
+    </div>
+  </div>
+
+  <div id="lgpd"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script>
+    const session = AUTH.require(['supervisor', 'gestao']);
+    if (!session) { throw new Error('no session'); }
+    document.getElementById('header').innerHTML = AUTH.renderHeader('Dashboard Gerencial', 'Indicadores e acompanhamento técnico');
+    document.getElementById('lgpd').innerHTML = AUTH.renderLgpdFooter();
+
+    let CONTRATOS = [];
+    let CONTRATO_ATUAL = null;
+    let DADOS = null;
+    let LINHAS = [];
+    let LINHAS_FILTRADAS = [];
+    let HEADERS = [];
+    let CHART1 = null, CHART2 = null;
+
+    async function init() {
+      Utils.showLoading();
+      const res = await API.call('listarContratos');
+      Utils.hideLoading();
+      CONTRATOS = res.contratos || [];
+      if (CONTRATOS.length === 0) return;
+
+      if (CONTRATOS.length > 1) {
+        document.getElementById('contratoSelectorWrap').classList.remove('hidden');
+        const s = document.getElementById('contratoSelect');
+        CONTRATOS.forEach(c => s.innerHTML += `<option value="${c.id}">${Utils.escapeHtml(c.nome)}</option>`);
+        s.addEventListener('change', () => carregarDashboard(s.value));
+      }
+
+      const paramContrato = Utils.getQueryParam('contrato');
+      const inicial = paramContrato && CONTRATOS.find(c => c.id === paramContrato)
+        ? paramContrato
+        : CONTRATOS[0].id;
+      if (document.getElementById('contratoSelect')) document.getElementById('contratoSelect').value = inicial;
+      carregarDashboard(inicial);
+    }
+
+    async function carregarDashboard(contratoId) {
+      CONTRATO_ATUAL = CONTRATOS.find(c => c.id === contratoId);
+      if (!CONTRATO_ATUAL) return;
+
+      document.getElementById('contratoNome').textContent = CONTRATO_ATUAL.nome;
+      document.getElementById('contratoSub').textContent =
+        CONTRATO_ATUAL.tipoServico + ' — ' + (CONTRATO_ATUAL.tipoContrato === 'A' ? 'Contrato por lojas (Tipo A)' : 'Contrato por pontos (Tipo B)');
+
+      Utils.showLoading();
+      const [dashRes, listRes] = await Promise.all([
+        API.call('dashboard', { contratoId: contratoId }),
+        CONTRATO_ATUAL.tipoContrato === 'A'
+          ? API.call('listarLojas', { contratoId: contratoId })
+          : API.call('listarPontos', { contratoId: contratoId })
+      ]);
+      Utils.hideLoading();
+
+      if (!dashRes.ok) { Utils.toast(dashRes.error, 'error'); return; }
+
+      DADOS = dashRes;
+      HEADERS = (listRes.ok ? listRes.headers : []) || [];
+      LINHAS = (listRes.ok ? (listRes.lojas || listRes.pontos) : []) || [];
+      LINHAS_FILTRADAS = LINHAS.slice();
+
+      renderKPIs();
+      renderProgress();
+      renderCharts();
+      renderIndicadores();
+      renderRanking();
+      renderTabela();
+      renderDatalist();
+    }
+
+    function kpiCard(label, value, cls) {
+      return `<div class="kpi-card ${cls || ''}">
+        <div class="kpi-value">${Utils.escapeHtml(value)}</div>
+        <div class="kpi-label">${Utils.escapeHtml(label)}</div>
+      </div>`;
+    }
+
+    function renderKPIs() {
+      let html = '<div class="kpi-grid">';
+      if (DADOS.tipoContrato === 'A') {
+        const s = DADOS.byStatus || {};
+        html += kpiCard('Total lojas', DADOS.total, '');
+        html += kpiCard('Conformes', s.CONFORME || 0, 'conforme');
+        html += kpiCard('Pendências', (s.PENDÊNCIA || 0) + (s.PENDENCIA || 0), 'pendencia');
+        html += kpiCard('Alarmes', s.ALARME || 0, 'alarme');
+        html += kpiCard('Fechadas', s.FECHADA || 0, 'fechada');
+        html += kpiCard('Interligadas', DADOS.interligadas, '');
+      } else {
+        const v = DADOS.byVisita || {};
+        const realizadas = v.REALIZADA || 0;
+        const pendentes = (v.PENDENTE || 0);
+        html += kpiCard('Total pontos', DADOS.total, '');
+        html += kpiCard('Realizadas', realizadas, 'conforme');
+        html += kpiCard('Pendentes', pendentes, 'pendencia');
+        html += kpiCard('Centrais', Object.keys(DADOS.byCentral || {}).length, '');
+        html += kpiCard('Tipos de device', Object.keys(DADOS.byDevice || {}).length, '');
+      }
+      html += '</div>';
+      document.getElementById('kpis').innerHTML = html;
+    }
+
+    function renderProgress() {
+      let pct = 0; let label = '';
+      if (DADOS.tipoContrato === 'A') {
+        pct = DADOS.total ? Math.round((DADOS.interligadas / DADOS.total) * 100) : 0;
+        label = 'Interligação das lojas';
+      } else {
+        const realizadas = (DADOS.byVisita && DADOS.byVisita.REALIZADA) || 0;
+        pct = DADOS.total ? Math.round((realizadas / DADOS.total) * 100) : 0;
+        label = 'Manutenções realizadas';
+      }
+      document.getElementById('progressTitle').textContent = label + ' — ' + pct + '%';
+      const bar = document.getElementById('progressBar');
+      bar.style.width = pct + '%';
+      bar.textContent = pct + '%';
+    }
+
+    function renderCharts() {
+      const ctx1 = document.getElementById('chart1').getContext('2d');
+      const ctx2 = document.getElementById('chart2').getContext('2d');
+      if (CHART1) CHART1.destroy();
+      if (CHART2) CHART2.destroy();
+
+      if (DADOS.tipoContrato === 'A') {
+        document.getElementById('chart1Title').textContent = 'Distribuição por status';
+        document.getElementById('chart2Title').textContent = 'Status por piso';
+
+        const st = DADOS.byStatus || {};
+        CHART1 = new Chart(ctx1, {
+          type: 'doughnut',
+          data: {
+            labels: Object.keys(st),
+            datasets: [{
+              data: Object.values(st),
+              backgroundColor: ['#27AE60','#E67E22','#E74C3C','#D4AC0D','#839192','#2E86C1']
+            }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        const pisos = DADOS.byPiso || {};
+        const pisosLabels = Object.keys(pisos);
+        CHART2 = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: pisosLabels,
+            datasets: [
+              { label: 'Conforme', data: pisosLabels.map(p => pisos[p].conforme), backgroundColor: '#27AE60' },
+              { label: 'Pendência', data: pisosLabels.map(p => pisos[p].pendencia), backgroundColor: '#E67E22' },
+              { label: 'Alarme', data: pisosLabels.map(p => pisos[p].alarme), backgroundColor: '#E74C3C' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
+        });
+      } else {
+        document.getElementById('chart1Title').textContent = 'Visitas realizadas vs pendentes';
+        document.getElementById('chart2Title').textContent = 'Pontos por central';
+
+        const v = DADOS.byVisita || {};
+        CHART1 = new Chart(ctx1, {
+          type: 'doughnut',
+          data: { labels: Object.keys(v), datasets: [{ data: Object.values(v), backgroundColor: ['#27AE60','#E67E22','#839192'] }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        const c = DADOS.byCentral || {};
+        const centralLabels = Object.keys(c);
+        CHART2 = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: centralLabels,
+            datasets: [
+              { label: 'Realizadas', data: centralLabels.map(x => c[x].realizadas), backgroundColor: '#27AE60' },
+              { label: 'Pendentes', data: centralLabels.map(x => c[x].pendentes), backgroundColor: '#E67E22' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
+        });
+      }
+    }
+
+    function renderIndicadores() {
+      const div = document.getElementById('indicadoresTec');
+      if (DADOS.tipoContrato === 'A') {
+        document.getElementById('rankingTitle').textContent = 'Indicadores técnicos';
+        let comModulo = 0, com24v = 0, com220 = 0, comCabo = 0, comCentral = 0;
+        LINHAS.forEach(l => {
+          const up = v => String(v || '').toUpperCase() === 'SIM';
+          if (up(l['POSSUI MÓDULO']) || up(l['POSSUI MODULO'])) comModulo++;
+          if (up(l['FONTE 24V'])) com24v++;
+          if (up(l['220VAC'])) com220++;
+          if (up(l['CABO LOJA'])) comCabo++;
+          if (up(l['POSSUI CENTRAL'])) comCentral++;
+        });
+        const total = DADOS.total || 1;
+        const pct = n => Math.round((n/total)*100) + '%';
+        div.innerHTML = `
+          <div class="indicator-grid">
+            <div class="indicator"><div class="label">Com módulo</div><div class="val">${comModulo} (${pct(comModulo)})</div></div>
+            <div class="indicator"><div class="label">Fonte 24V</div><div class="val">${com24v} (${pct(com24v)})</div></div>
+            <div class="indicator"><div class="label">220VAC</div><div class="val">${com220} (${pct(com220)})</div></div>
+            <div class="indicator"><div class="label">Cabo da loja</div><div class="val">${comCabo} (${pct(comCabo)})</div></div>
+            <div class="indicator"><div class="label">Possui central</div><div class="val">${comCentral} (${pct(comCentral)})</div></div>
+            <div class="indicator"><div class="label">Interligadas</div><div class="val">${DADOS.interligadas} (${pct(DADOS.interligadas)})</div></div>
+          </div>`;
+      } else {
+        document.getElementById('rankingTitle').textContent = 'Distribuição por tipo de device';
+        const dev = DADOS.byDevice || {};
+        const sorted = Object.entries(dev).sort((a,b) => b[1]-a[1]).slice(0, 8);
+        div.innerHTML = '<div class="indicator-grid">' +
+          sorted.map(([k,v]) => `<div class="indicator"><div class="label">${Utils.escapeHtml(k)}</div><div class="val">${v}</div></div>`).join('') +
+          '</div>';
+      }
+    }
+
+    function renderRanking() {
+      const div = document.getElementById('ranking');
+      if (DADOS.tipoContrato === 'A') {
+        // Ranking: quais problemas mais aparecem
+        const counts = {};
+        LINHAS.forEach(l => {
+          const st = String(l.STATUS || '').toUpperCase();
+          if (st === 'PENDÊNCIA' || st === 'PENDENCIA' || st === 'ALARME' || st === 'A VERIFICAR') {
+            counts[st] = (counts[st] || 0) + 1;
+          }
+          if (String(l['CABO LOJA'] || '').toUpperCase() === 'NÃO' || String(l['CABO LOJA']).toUpperCase() === 'NAO') {
+            counts['SEM CABO'] = (counts['SEM CABO'] || 0) + 1;
+          }
+          if (String(l['POSSUI MÓDULO'] || l['POSSUI MODULO'] || '').toUpperCase() === 'NÃO') {
+            counts['SEM MÓDULO'] = (counts['SEM MÓDULO'] || 0) + 1;
+          }
+          if (String(l['INTERLIGADA'] || '').toUpperCase() === 'NÃO') {
+            counts['NÃO INTERLIGADA'] = (counts['NÃO INTERLIGADA'] || 0) + 1;
+          }
+        });
+        const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+        if (sorted.length === 0) { div.innerHTML = '<p class="text-muted">Nenhum problema identificado.</p>'; return; }
+        let html = '<div class="indicator-grid">';
+        sorted.forEach(([k,v]) => html += `<div class="indicator"><div class="label">${Utils.escapeHtml(k)}</div><div class="val" style="color:var(--alarme)">${v}</div></div>`);
+        html += '</div>';
+        div.innerHTML = html;
+      } else {
+        const counts = {};
+        LINHAS.forEach(p => {
+          const v = String(p.VISITA || '').toUpperCase();
+          if (v === 'PENDENTE' || v === '') {
+            counts['Pendente manutenção'] = (counts['Pendente manutenção'] || 0) + 1;
+          }
+        });
+        const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+        if (sorted.length === 0) { div.innerHTML = '<p class="text-muted">Tudo em dia.</p>'; return; }
+        div.innerHTML = '<div class="indicator-grid">' +
+          sorted.map(([k,v]) => `<div class="indicator"><div class="label">${Utils.escapeHtml(k)}</div><div class="val" style="color:var(--pendencia)">${v}</div></div>`).join('') +
+          '</div>';
+      }
+    }
+
+    function renderDatalist() {
+      const dl = document.getElementById('searchDL');
+      dl.innerHTML = '';
+      LINHAS.slice(0, 500).forEach(r => {
+        const val = DADOS.tipoContrato === 'A'
+          ? (r.LUC + ' - ' + (r.LOJAS || ''))
+          : (r['POINT NAME'] + ' - ' + (r['DESCRIÇÃO NA CENTRAL'] || r['DESCRICAO NA CENTRAL'] || ''));
+        dl.innerHTML += '<option value="' + Utils.escapeHtml(val) + '">';
+      });
+    }
+
+    function searchIndividual() {
+      const q = document.getElementById('searchInd').value.trim().toLowerCase();
+      const div = document.getElementById('detailCard');
+      if (!q || q.length < 2) { div.innerHTML = ''; return; }
+
+      const item = LINHAS.find(r => {
+        if (DADOS.tipoContrato === 'A') {
+          return String(r.LUC || '').toLowerCase().includes(q) ||
+                 String(r.LOJAS || '').toLowerCase().includes(q);
+        } else {
+          return String(r['POINT NAME'] || '').toLowerCase().includes(q) ||
+                 String(r['DESCRIÇÃO NA CENTRAL'] || r['DESCRICAO NA CENTRAL'] || '').toLowerCase().includes(q);
+        }
+      });
+
+      if (!item) { div.innerHTML = '<p class="text-muted" style="margin-top:10px">Nada encontrado.</p>'; return; }
+
+      let html = '<div class="card detail-card" style="margin-top:16px;background:#fafbfc"><h3>';
+      html += DADOS.tipoContrato === 'A'
+        ? `LUC ${Utils.escapeHtml(item.LUC)} — ${Utils.escapeHtml(item.LOJAS)}`
+        : `${Utils.escapeHtml(item['POINT NAME'])}`;
+      html += '</h3>';
+
+      html += '<div class="indicator-grid">';
+      HEADERS.forEach(h => {
+        if (['LUC','LOJAS','POINT NAME'].indexOf(h) !== -1) return;
+        const v = item[h];
+        if (v === null || v === undefined || v === '') return;
+        let display = v;
+        if (h === 'DATA MANUT.' || h === 'DATA MANUTENÇÃO' || h === 'DATA PRÓX MANUTENÇÃO') {
+          display = Utils.formatDateOnly(v);
+        }
+        html += `<div class="indicator"><div class="label">${Utils.escapeHtml(h)}</div><div class="val">${Utils.escapeHtml(display)}</div></div>`;
+      });
+      html += '</div></div>';
+
+      div.innerHTML = html;
+    }
+
+    function filtrarTabela() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      LINHAS_FILTRADAS = !q ? LINHAS.slice() : LINHAS.filter(r => HEADERS.some(h => String(r[h] || '').toLowerCase().includes(q)));
+      renderTabela();
+    }
+
+    function renderTabela() {
+      const div = document.getElementById('tabelaWrap');
+      if (LINHAS_FILTRADAS.length === 0) { div.innerHTML = '<p class="text-muted">Nenhum registro.</p>'; return; }
+
+      const visibleHeaders = DADOS.tipoContrato === 'A'
+        ? ['LUC', 'LOJAS', 'PISO', 'STATUS', 'POSSUI MÓDULO', 'CABO LOJA', 'INTERLIGADA', 'DATA MANUT.']
+        : ['POINT NAME', 'DEVICE TYPE', 'CENTRAL', 'DESCRIÇÃO NA CENTRAL', 'VISITA', 'DATA MANUTENÇÃO'];
+      const hdrs = visibleHeaders.filter(h => HEADERS.indexOf(h) !== -1);
+
+      let html = '<div class="table-wrap"><table><thead><tr>';
+      hdrs.forEach(h => html += '<th>' + Utils.escapeHtml(h) + '</th>');
+      html += '</tr></thead><tbody>';
+
+      LINHAS_FILTRADAS.slice(0, 500).forEach(r => {
+        html += '<tr>';
+        hdrs.forEach(h => {
+          let val = r[h];
+          if (h === 'STATUS' || h === 'VISITA') {
+            const upper = String(val || '').toUpperCase();
+            html += '<td><span class="status-badge ' + Utils.statusClass(val) + '">' + Utils.escapeHtml(upper || '-') + '</span></td>';
+          } else if (h === 'DATA MANUT.' || h === 'DATA MANUTENÇÃO') {
+            html += '<td>' + (val ? Utils.formatDateOnly(val) : '-') + '</td>';
+          } else {
+            html += '<td>' + Utils.escapeHtml(val) + '</td>';
+          }
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      if (LINHAS_FILTRADAS.length > 500) {
+        html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 500 de ' + LINHAS_FILTRADAS.length + '.</p>';
+      }
+      div.innerHTML = html;
+    }
+
+    function exportarCSV() {
+      if (!LINHAS.length) return;
+      let csv = HEADERS.join(',') + '\n';
+      LINHAS.forEach(r => {
+        csv += HEADERS.map(h => {
+          let v = String(r[h] == null ? '' : r[h]).replace(/"/g, '""');
+          return '"' + v + '"';
+        }).join(',') + '\n';
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (CONTRATO_ATUAL.id || 'export') + '_' + new Date().toISOString().substring(0,10) + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0D1B2A">
+  <title>Dashboard Cliente · CLTECH Fire</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container">
+    <div id="contratoSelector"></div>
+
+    <div class="card">
+      <h2 id="contratoNome">Dashboard</h2>
+      <p class="text-muted" style="font-size:13px" id="contratoSub">Visão geral do seu contrato de manutenção</p>
+    </div>
+
+    <div id="kpis"></div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <h3 id="chart1Title">Distribuição</h3>
+        <div class="chart-container"><canvas id="chart1"></canvas></div>
+      </div>
+      <div class="card">
+        <h3 id="chart2Title">Por categoria</h3>
+        <div class="chart-container"><canvas id="chart2"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="flex-between mb-md">
+        <h3>Registros</h3>
+        <input type="search" id="search" placeholder="Buscar..." class="form-control" style="max-width:260px" oninput="filtrarTabela()">
+      </div>
+      <div id="tabelaWrap"></div>
+    </div>
+  </div>
+
+  <div id="lgpd"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script>
+    const session = AUTH.require(['cliente', 'supervisor', 'gestao']);
+    if (!session) { throw new Error('no session'); }
+    document.getElementById('header').innerHTML = AUTH.renderHeader('Painel Cliente', 'Acompanhamento do contrato de manutenção');
+    document.getElementById('lgpd').innerHTML = AUTH.renderLgpdFooter();
+
+    let CONTRATOS = [];
+    let CONTRATO_ATUAL = null;
+    let DADOS = null;
+    let LINHAS = [];
+    let LINHAS_FILTRADAS = [];
+    let HEADERS = [];
+    let CHART1 = null, CHART2 = null;
+
+    async function init() {
+      Utils.showLoading();
+      const res = await API.call('listarContratos');
+      Utils.hideLoading();
+      CONTRATOS = res.contratos || [];
+
+      if (CONTRATOS.length === 0) {
+        document.getElementById('contratoNome').textContent = 'Nenhum contrato disponível';
+        return;
+      }
+
+      // Se tem mais de 1 contrato, mostra selector
+      if (CONTRATOS.length > 1) {
+        const sel = document.createElement('div');
+        sel.className = 'card';
+        sel.innerHTML = '<label class="form-label">Contrato</label><select id="contratoSelect" class="form-control"></select>';
+        document.getElementById('contratoSelector').appendChild(sel);
+        const s = document.getElementById('contratoSelect');
+        CONTRATOS.forEach(c => {
+          s.innerHTML += `<option value="${c.id}">${Utils.escapeHtml(c.nome)}</option>`;
+        });
+        s.addEventListener('change', () => carregarDashboard(s.value));
+      }
+
+      carregarDashboard(CONTRATOS[0].id);
+    }
+
+    async function carregarDashboard(contratoId) {
+      CONTRATO_ATUAL = CONTRATOS.find(c => c.id === contratoId);
+      if (!CONTRATO_ATUAL) return;
+
+      document.getElementById('contratoNome').textContent = CONTRATO_ATUAL.nome;
+      document.getElementById('contratoSub').textContent =
+        CONTRATO_ATUAL.tipoServico + ' — ' + (CONTRATO_ATUAL.tipoContrato === 'A' ? 'Contrato por lojas' : 'Contrato por pontos');
+
+      Utils.showLoading();
+      const [dashRes, listRes] = await Promise.all([
+        API.call('dashboard', { contratoId: contratoId }),
+        CONTRATO_ATUAL.tipoContrato === 'A'
+          ? API.call('listarLojas', { contratoId: contratoId })
+          : API.call('listarPontos', { contratoId: contratoId })
+      ]);
+      Utils.hideLoading();
+
+      if (!dashRes.ok) {
+        Utils.toast(dashRes.error, 'error');
+        return;
+      }
+
+      DADOS = dashRes;
+      HEADERS = (listRes.ok ? listRes.headers : []) || [];
+      LINHAS = (listRes.ok ? (listRes.lojas || listRes.pontos) : []) || [];
+      LINHAS_FILTRADAS = LINHAS.slice();
+
+      renderKPIs();
+      renderCharts();
+      renderTabela();
+    }
+
+    function renderKPIs() {
+      const div = document.getElementById('kpis');
+      let html = '<div class="kpi-grid">';
+
+      if (DADOS.tipoContrato === 'A') {
+        const s = DADOS.byStatus || {};
+        html += kpiCard('Total de lojas', DADOS.total, '');
+        html += kpiCard('Conformes', s.CONFORME || 0, 'conforme');
+        html += kpiCard('Pendências', (s.PENDÊNCIA || 0) + (s.PENDENCIA || 0), 'pendencia');
+        html += kpiCard('Alarmes', s.ALARME || 0, 'alarme');
+        html += kpiCard('Fechadas', s.FECHADA || 0, 'fechada');
+        html += kpiCard('A Verificar', s['A VERIFICAR'] || 0, 'verificar');
+        html += kpiCard('Interligadas', DADOS.interligadas, '');
+        html += kpiCard('Com módulo', DADOS.comModulo, '');
+      } else {
+        const v = DADOS.byVisita || {};
+        const realizadas = v.REALIZADA || 0;
+        const pendentes = (v.PENDENTE || 0) + (v['N/A'] || 0);
+        const pct = DADOS.total ? Math.round((realizadas / DADOS.total) * 100) : 0;
+        html += kpiCard('Total de pontos', DADOS.total, '');
+        html += kpiCard('Realizadas', realizadas, 'conforme');
+        html += kpiCard('Pendentes', pendentes, 'pendencia');
+        html += kpiCard('% Completo', pct + '%', pct >= 80 ? 'conforme' : 'pendencia');
+        html += kpiCard('Centrais', Object.keys(DADOS.byCentral || {}).length, '');
+        html += kpiCard('Tipos de device', Object.keys(DADOS.byDevice || {}).length, '');
+      }
+
+      html += '</div>';
+      div.innerHTML = html;
+    }
+
+    function kpiCard(label, value, cls) {
+      return `<div class="kpi-card ${cls || ''}">
+        <div class="kpi-value">${Utils.escapeHtml(value)}</div>
+        <div class="kpi-label">${Utils.escapeHtml(label)}</div>
+      </div>`;
+    }
+
+    function renderCharts() {
+      const ctx1 = document.getElementById('chart1').getContext('2d');
+      const ctx2 = document.getElementById('chart2').getContext('2d');
+      if (CHART1) CHART1.destroy();
+      if (CHART2) CHART2.destroy();
+
+      if (DADOS.tipoContrato === 'A') {
+        document.getElementById('chart1Title').textContent = 'Distribuição por status';
+        document.getElementById('chart2Title').textContent = 'Status por piso';
+
+        const st = DADOS.byStatus || {};
+        CHART1 = new Chart(ctx1, {
+          type: 'doughnut',
+          data: {
+            labels: Object.keys(st),
+            datasets: [{
+              data: Object.values(st),
+              backgroundColor: ['#27AE60','#E67E22','#E74C3C','#D4AC0D','#839192','#2E86C1']
+            }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        const pisos = DADOS.byPiso || {};
+        const pisosLabels = Object.keys(pisos);
+        CHART2 = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: pisosLabels,
+            datasets: [
+              { label: 'Conforme', data: pisosLabels.map(p => pisos[p].conforme), backgroundColor: '#27AE60' },
+              { label: 'Pendência', data: pisosLabels.map(p => pisos[p].pendencia), backgroundColor: '#E67E22' },
+              { label: 'Alarme', data: pisosLabels.map(p => pisos[p].alarme), backgroundColor: '#E74C3C' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
+        });
+      } else {
+        document.getElementById('chart1Title').textContent = 'Visitas realizadas vs pendentes';
+        document.getElementById('chart2Title').textContent = 'Pontos por central';
+
+        const v = DADOS.byVisita || {};
+        CHART1 = new Chart(ctx1, {
+          type: 'doughnut',
+          data: {
+            labels: Object.keys(v),
+            datasets: [{
+              data: Object.values(v),
+              backgroundColor: ['#27AE60','#E67E22','#839192']
+            }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        const c = DADOS.byCentral || {};
+        const centralLabels = Object.keys(c);
+        CHART2 = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: centralLabels,
+            datasets: [
+              { label: 'Realizadas', data: centralLabels.map(x => c[x].realizadas), backgroundColor: '#27AE60' },
+              { label: 'Pendentes', data: centralLabels.map(x => c[x].pendentes), backgroundColor: '#E67E22' }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true } } }
+        });
+      }
+    }
+
+    function filtrarTabela() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      if (!q) { LINHAS_FILTRADAS = LINHAS.slice(); renderTabela(); return; }
+      LINHAS_FILTRADAS = LINHAS.filter(r => {
+        return HEADERS.some(h => String(r[h] || '').toLowerCase().includes(q));
+      });
+      renderTabela();
+    }
+
+    function renderTabela() {
+      const div = document.getElementById('tabelaWrap');
+      if (LINHAS_FILTRADAS.length === 0) { div.innerHTML = '<p class="text-muted">Nenhum registro.</p>'; return; }
+
+      const visibleHeaders = DADOS.tipoContrato === 'A'
+        ? ['LUC', 'LOJAS', 'PISO', 'STATUS', 'POSSUI MÓDULO', 'INTERLIGADA', 'DATA MANUT.']
+        : ['POINT NAME', 'DEVICE TYPE', 'CENTRAL', 'DESCRIÇÃO NA CENTRAL', 'VISITA', 'DATA MANUTENÇÃO'];
+
+      const hdrs = visibleHeaders.filter(h => HEADERS.indexOf(h) !== -1);
+
+      let html = '<div class="table-wrap"><table><thead><tr>';
+      hdrs.forEach(h => html += '<th>' + Utils.escapeHtml(h) + '</th>');
+      html += '</tr></thead><tbody>';
+
+      LINHAS_FILTRADAS.slice(0, 300).forEach(r => {
+        html += '<tr>';
+        hdrs.forEach(h => {
+          let val = r[h];
+          if (h === 'STATUS' || h === 'VISITA') {
+            const upper = String(val || '').toUpperCase();
+            html += '<td><span class="status-badge ' + Utils.statusClass(val) + '">' + Utils.escapeHtml(upper || '-') + '</span></td>';
+          } else if (h === 'DATA MANUT.' || h === 'DATA MANUTENÇÃO') {
+            html += '<td>' + (val ? Utils.formatDateOnly(val) : '-') + '</td>';
+          } else {
+            html += '<td>' + Utils.escapeHtml(val) + '</td>';
+          }
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      if (LINHAS_FILTRADAS.length > 300) {
+        html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 300 de ' + LINHAS_FILTRADAS.length + '.</p>';
+      }
+      div.innerHTML = html;
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0D1B2A">
+  <title>Supervisor · CLTECH Fire</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container">
+    <div class="mobile-nav">
+      <a href="#usuarios" class="active" onclick="switchTab('usuarios', this)">Usuários</a>
+      <a href="#contratos" onclick="switchTab('contratos', this)">Contratos</a>
+      <a href="dashboard.html?contrato=shopping-parangaba">Dashboard Shopping</a>
+      <a href="campo.html">Interface Campo</a>
+    </div>
+
+    <!-- ===================== USUÁRIOS ===================== -->
+    <div id="tab-usuarios">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2>Usuários do sistema</h2>
+          <button class="btn btn-primary" onclick="abrirModalUsuario()">+ Novo usuário</button>
+        </div>
+        <p class="text-muted" style="font-size:12px;margin-bottom:12px">
+          Crie logins para Gestão, Campo ou Cliente. Cada perfil acessa apenas a página correspondente.
+        </p>
+        <div id="tabelaUsuarios"></div>
+      </div>
+    </div>
+
+    <!-- ===================== CONTRATOS ===================== -->
+    <div id="tab-contratos" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2>Contratos ativos</h2>
+          <button class="btn btn-primary" onclick="abrirModalContrato()">+ Novo contrato</button>
+        </div>
+        <p class="text-muted" style="font-size:12px;margin-bottom:12px">
+          Cada contrato pode ser SDAI, Bombas, Iluminação, Extintores, etc. Tipo A = Shopping (lojas), Tipo B = Industrial (pontos).
+        </p>
+        <div id="tabelaContratos"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL USUÁRIO ===================== -->
+  <div id="modalUsuario" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px">
+    <div class="card" style="max-width:500px;width:100%;margin:0">
+      <div class="flex-between mb-md">
+        <h2 id="modalUsuarioTitle">Novo usuário</h2>
+        <button class="btn btn-ghost btn-sm" onclick="fecharModalUsuario()">✕</button>
+      </div>
+      <div id="alertModalUsuario"></div>
+      <form id="formUsuario">
+        <input type="hidden" id="u_email_original">
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Nome completo *</label>
+            <input type="text" id="u_nome" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email *</label>
+            <input type="email" id="u_email" class="form-control" required>
+          </div>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Perfil *</label>
+            <select id="u_perfil" class="form-control" required onchange="atualizarCamposPerfil()">
+              <option value="">-- Selecionar --</option>
+              <option value="gestao">Gestão (equipe do escritório)</option>
+              <option value="campo">Campo (técnicos)</option>
+              <option value="cliente">Cliente (dashboard somente leitura)</option>
+              <option value="supervisor">Supervisor (acesso total)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Senha *</label>
+            <input type="text" id="u_senha" class="form-control" placeholder="Senha inicial">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contratos permitidos</label>
+          <select id="u_contratos" class="form-control">
+            <option value="*">Todos os contratos (*)</option>
+          </select>
+          <small class="text-muted" style="font-size:11px">Para Cliente, selecione apenas o contrato dele.</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select id="u_ativo" class="form-control">
+            <option value="SIM">Ativo</option>
+            <option value="NAO">Inativo</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL CONTRATO ===================== -->
+  <div id="modalContrato" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px">
+    <div class="card" style="max-width:500px;width:100%;margin:0">
+      <div class="flex-between mb-md">
+        <h2>Novo contrato</h2>
+        <button class="btn btn-ghost btn-sm" onclick="fecharModalContrato()">✕</button>
+      </div>
+      <div id="alertModalContrato"></div>
+      <form id="formContrato">
+        <div class="form-group">
+          <label class="form-label">Nome do contrato *</label>
+          <input type="text" id="c_nome" class="form-control" placeholder="Ex: Klabin S.A." required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ID (slug) *</label>
+          <input type="text" id="c_id" class="form-control" placeholder="Ex: klabin" required>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Tipo de serviço *</label>
+            <select id="c_tipoServico" class="form-control" required>
+              <option value="SDAI">SDAI — Detecção e Alarme</option>
+              <option value="BOMBAS">Bombas de Incêndio</option>
+              <option value="ILUMINACAO">Iluminação de Emergência</option>
+              <option value="EXTINTORES">Extintores</option>
+              <option value="HIDRANTES">Hidrantes</option>
+              <option value="OUTRO">Outro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo de contrato *</label>
+            <select id="c_tipoContrato" class="form-control" required>
+              <option value="A">Tipo A — Shopping (lojas)</option>
+              <option value="B">Tipo B — Industrial (pontos)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ID da planilha Google Sheets</label>
+          <input type="text" id="c_planilha" class="form-control" placeholder="Deixe em branco para usar a master">
+          <small class="text-muted" style="font-size:11px">Ex: 12MFGQegCkrVJrMrdvUlYZeJpoj-3zQS-V6CbCuHtW2U</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nome da aba de dados</label>
+          <input type="text" id="c_aba" class="form-control" placeholder="Ex: DADOS_LOJAS ou DADOS_PONTOS">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Criar contrato</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="lgpd"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script>
+    const session = AUTH.require(['supervisor', 'gestao']);
+    if (!session) { throw new Error('no session'); }
+    document.getElementById('header').innerHTML = AUTH.renderHeader('Painel Supervisor', 'Gestão de usuários, contratos e dashboards');
+    document.getElementById('lgpd').innerHTML = AUTH.renderLgpdFooter();
+
+    let CONTRATOS = [];
+
+    function switchTab(tab, el) {
+      document.querySelectorAll('.mobile-nav a').forEach(a => a.classList.remove('active'));
+      if (el) el.classList.add('active');
+      document.getElementById('tab-usuarios').classList.toggle('hidden', tab !== 'usuarios');
+      document.getElementById('tab-contratos').classList.toggle('hidden', tab !== 'contratos');
+    }
+
+    async function carregarUsuarios() {
+      Utils.showLoading();
+      const res = await API.call('listarUsuarios');
+      Utils.hideLoading();
+      const div = document.getElementById('tabelaUsuarios');
+      if (!res.ok) {
+        div.innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
+        return;
+      }
+      if (res.usuarios.length === 0) {
+        div.innerHTML = '<p class="text-muted">Nenhum usuário cadastrado.</p>';
+        return;
+      }
+      let html = '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Contratos</th><th>Status</th><th></th></tr></thead><tbody>';
+      res.usuarios.forEach(u => {
+        const ativo = u.ativo === 'SIM' ? '<span class="status-badge status-CONFORME">Ativo</span>' : '<span class="status-badge status-FECHADA">Inativo</span>';
+        html += `<tr>
+          <td><strong>${Utils.escapeHtml(u.nome)}</strong></td>
+          <td>${Utils.escapeHtml(u.email)}</td>
+          <td><span class="badge ${u.perfil}" style="padding:3px 8px;border-radius:12px;font-size:11px;background:var(--primary);color:#fff">${u.perfil}</span></td>
+          <td>${Utils.escapeHtml(u.contratos === '*' ? 'Todos' : u.contratos)}</td>
+          <td>${ativo}</td>
+          <td>
+            <button class="btn btn-ghost btn-sm" onclick="editarUsuario('${u.email}')">Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="removerUsuario('${u.email}')">Remover</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+      div.innerHTML = html;
+    }
+
+    async function carregarContratos() {
+      Utils.showLoading();
+      const res = await API.call('listarContratos');
+      Utils.hideLoading();
+      CONTRATOS = res.contratos || [];
+      const div = document.getElementById('tabelaContratos');
+      if (!res.ok) {
+        div.innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
+        return;
+      }
+      if (CONTRATOS.length === 0) {
+        div.innerHTML = '<p class="text-muted">Nenhum contrato cadastrado.</p>';
+        return;
+      }
+      let html = '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>ID</th><th>Serviço</th><th>Tipo</th><th>Status</th><th></th></tr></thead><tbody>';
+      CONTRATOS.forEach(c => {
+        const linkDash = c.tipoContrato === 'A'
+          ? `<a href="dashboard.html?contrato=${encodeURIComponent(c.id)}" class="btn btn-ghost btn-sm">Dashboard</a>`
+          : `<a href="dashboard.html?contrato=${encodeURIComponent(c.id)}" class="btn btn-ghost btn-sm">Dashboard</a>`;
+        html += `<tr>
+          <td><strong>${Utils.escapeHtml(c.nome)}</strong></td>
+          <td><code>${Utils.escapeHtml(c.id)}</code></td>
+          <td>${Utils.escapeHtml(c.tipoServico)}</td>
+          <td>${c.tipoContrato === 'A' ? 'Shopping (lojas)' : 'Industrial (pontos)'}</td>
+          <td><span class="status-badge status-CONFORME">Ativo</span></td>
+          <td>${linkDash}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+      div.innerHTML = html;
+
+      // Atualiza select de contratos no modal de usuário
+      const sel = document.getElementById('u_contratos');
+      const atual = sel.value;
+      sel.innerHTML = '<option value="*">Todos os contratos (*)</option>';
+      CONTRATOS.forEach(c => {
+        sel.innerHTML += `<option value="${c.id}">${Utils.escapeHtml(c.nome)}</option>`;
+      });
+      sel.value = atual || '*';
+    }
+
+    // ==================== USUÁRIO ====================
+    function abrirModalUsuario() {
+      document.getElementById('modalUsuarioTitle').textContent = 'Novo usuário';
+      document.getElementById('formUsuario').reset();
+      document.getElementById('u_email_original').value = '';
+      document.getElementById('u_email').disabled = false;
+      document.getElementById('alertModalUsuario').innerHTML = '';
+      document.getElementById('modalUsuario').classList.remove('hidden');
+    }
+
+    function fecharModalUsuario() {
+      document.getElementById('modalUsuario').classList.add('hidden');
+    }
+
+    async function editarUsuario(email) {
+      const res = await API.call('listarUsuarios');
+      const u = (res.usuarios || []).find(x => x.email === email);
+      if (!u) return;
+      document.getElementById('modalUsuarioTitle').textContent = 'Editar usuário';
+      document.getElementById('u_email_original').value = u.email;
+      document.getElementById('u_nome').value = u.nome;
+      document.getElementById('u_email').value = u.email;
+      document.getElementById('u_email').disabled = true;
+      document.getElementById('u_perfil').value = u.perfil;
+      document.getElementById('u_senha').value = '';
+      document.getElementById('u_senha').placeholder = '(deixe em branco para manter)';
+      document.getElementById('u_contratos').value = u.contratos || '*';
+      document.getElementById('u_ativo').value = u.ativo || 'SIM';
+      document.getElementById('modalUsuario').classList.remove('hidden');
+    }
+
+    async function removerUsuario(email) {
+      if (!confirm('Remover o usuário ' + email + '?')) return;
+      Utils.showLoading();
+      const res = await API.call('removerUsuario', { email: email });
+      Utils.hideLoading();
+      if (res.ok) { Utils.toast('Usuário removido', 'success'); carregarUsuarios(); }
+      else Utils.toast(res.error, 'error');
+    }
+
+    function atualizarCamposPerfil() {
+      const perfil = document.getElementById('u_perfil').value;
+      const contratosWrap = document.getElementById('u_contratos').closest('.form-group');
+      if (perfil === 'cliente') {
+        contratosWrap.style.display = '';
+        document.querySelector('#u_contratos option[value="*"]').disabled = true;
+      } else {
+        contratosWrap.style.display = '';
+        document.querySelector('#u_contratos option[value="*"]').disabled = false;
+      }
+    }
+
+    document.getElementById('formUsuario').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const isEdit = !!document.getElementById('u_email_original').value;
+      const payload = {
+        email: document.getElementById('u_email').value.trim().toLowerCase(),
+        nome: document.getElementById('u_nome').value.trim(),
+        senha: document.getElementById('u_senha').value,
+        perfil: document.getElementById('u_perfil').value,
+        contratos: document.getElementById('u_contratos').value,
+        ativo: document.getElementById('u_ativo').value
+      };
+
+      Utils.showLoading();
+      const action = isEdit ? 'atualizarUsuario' : 'criarUsuario';
+      if (isEdit && !payload.senha) delete payload.senha;
+      const res = await API.call(action, payload);
+      Utils.hideLoading();
+
+      if (res.ok) {
+        Utils.toast('Salvo com sucesso', 'success');
+        fecharModalUsuario();
+        carregarUsuarios();
+      } else {
+        document.getElementById('alertModalUsuario').innerHTML =
+          '<div class="alert alert-error">' + Utils.escapeHtml(res.error) + '</div>';
+      }
+    });
+
+    // ==================== CONTRATO ====================
+    function abrirModalContrato() {
+      document.getElementById('formContrato').reset();
+      document.getElementById('alertModalContrato').innerHTML = '';
+      document.getElementById('modalContrato').classList.remove('hidden');
+    }
+
+    function fecharModalContrato() {
+      document.getElementById('modalContrato').classList.add('hidden');
+    }
+
+    document.getElementById('formContrato').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const payload = {
+        id: document.getElementById('c_id').value.trim().toLowerCase(),
+        nome: document.getElementById('c_nome').value.trim(),
+        tipoServico: document.getElementById('c_tipoServico').value,
+        tipoContrato: document.getElementById('c_tipoContrato').value,
+        planilhaId: document.getElementById('c_planilha').value.trim(),
+        abaDados: document.getElementById('c_aba').value.trim()
+      };
+
+      Utils.showLoading();
+      const res = await API.call('criarContrato', payload);
+      Utils.hideLoading();
+
+      if (res.ok) {
+        Utils.toast('Contrato criado', 'success');
+        fecharModalContrato();
+        carregarContratos();
+      } else {
+        document.getElementById('alertModalContrato').innerHTML =
+          '<div class="alert alert-error">' + Utils.escapeHtml(res.error) + '</div>';
+      }
+    });
+
+    // INIT
+    carregarContratos().then(carregarUsuarios);
+  </script>
+</body>
+</html>

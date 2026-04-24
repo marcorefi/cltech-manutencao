@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D1B2A">
+  <title>Login · CLTECH Fire — Sistema de Manutenção</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="logo">
+        <div class="logo-box"><img src="assets/img/cltech-vertical.png" alt="CLTECH Fire"></div>
+      </div>
+      <div class="tagline" style="margin-top:14px">Sistema de Contratos de Manutenção</div>
+
+      <div id="alertBox"></div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label" for="email">Email</label>
+          <input type="email" id="email" class="form-control" placeholder="seu@email.com" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="senha">Senha</label>
+          <input type="password" id="senha" class="form-control" placeholder="Sua senha" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="btnLogin">Entrar</button>
+      </form>
+
+      <details style="margin-top:20px;font-size:12px;color:var(--text-muted)">
+        <summary style="cursor:pointer">Configurações avançadas</summary>
+        <div class="form-group" style="margin-top:10px">
+          <label class="form-label">URL da API (Apps Script)</label>
+          <input type="url" id="apiUrl" class="form-control" placeholder="https://script.google.com/.../exec">
+          <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="saveApiUrl()">Salvar URL</button>
+          <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="testPing()">Testar conexão</button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script>
+    // Preenche URL da API se existir
+    document.getElementById('apiUrl').value = API.getUrl() || '';
+
+    // Se já estiver logado, redireciona
+    const session = AUTH.getSession();
+    if (session) {
+      AUTH.redirectByProfile(session.usuario.perfil);
+    }
+
+    function showAlert(msg, type) {
+      document.getElementById('alertBox').innerHTML =
+        '<div class="alert alert-' + (type || 'error') + '">' + Utils.escapeHtml(msg) + '</div>';
+    }
+
+    function saveApiUrl() {
+      const url = document.getElementById('apiUrl').value.trim();
+      if (!url) { showAlert('Digite uma URL'); return; }
+      API.setUrl(url);
+      showAlert('URL salva com sucesso', 'success');
+    }
+
+    async function testPing() {
+      Utils.showLoading();
+      const res = await API.ping();
+      Utils.hideLoading();
+      if (res.ok) {
+        showAlert('Conexão OK. Backend versão ' + res.version, 'success');
+      } else {
+        showAlert('Erro: ' + (res.error || 'desconhecido'));
+      }
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+      const btn = document.getElementById('btnLogin');
+
+      if (!API.getUrl()) {
+        showAlert('URL da API não configurada. Abra "Configurações avançadas" e cole a URL do Apps Script.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Autenticando...';
+      Utils.showLoading();
+
+      const res = await AUTH.login(email, senha);
+
+      Utils.hideLoading();
+      btn.disabled = false;
+      btn.textContent = 'Entrar';
+
+      if (res.ok) {
+        AUTH.redirectByProfile(res.usuario.perfil);
+      } else {
+        showAlert(res.error || 'Erro ao autenticar');
+      }
+    });
+  </script>
+</body>
+</html>

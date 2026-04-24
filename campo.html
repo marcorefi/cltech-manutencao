@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D1B2A">
+  <title>Campo · CLTECH Fire</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container">
+    <!-- ============= SELEÇÃO DE CONTRATO ============= -->
+    <div id="view-contratos">
+      <div class="card">
+        <h2>Selecione o contrato</h2>
+        <p class="text-muted" style="font-size:13px;margin-bottom:12px">Escolha em qual contrato você vai trabalhar hoje.</p>
+        <div id="listaContratos"></div>
+      </div>
+    </div>
+
+    <!-- ============= LISTA DE LOJAS (Tipo A) ============= -->
+    <div id="view-lojas" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2 id="lojasTitulo">Lojas</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarContratos()">← Voltar</button>
+        </div>
+        <div class="search-box">
+          <input type="search" id="searchLoja" placeholder="Buscar por LUC ou nome..." oninput="filtrarLojas()">
+        </div>
+        <div id="listaLojas"></div>
+      </div>
+    </div>
+
+    <!-- ============= FORMULÁRIO LOJA ============= -->
+    <div id="view-formLoja" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2 id="formLojaTitulo">Loja</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarLojas()">← Voltar</button>
+        </div>
+        <div id="alertFormLoja"></div>
+        <form id="formLoja"></form>
+      </div>
+
+      <div class="card" id="historicoLojaCard">
+        <h3>Histórico</h3>
+        <div id="historicoLoja"></div>
+      </div>
+    </div>
+
+    <!-- ============= LISTA DE PONTOS (Tipo B) ============= -->
+    <div id="view-pontos" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2 id="pontosTitulo">Pontos</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarContratos()">← Voltar</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Central</label>
+          <select id="filtroCentral" class="form-control" onchange="filtrarPontos()">
+            <option value="">Todas as centrais</option>
+          </select>
+        </div>
+        <div class="search-box">
+          <input type="search" id="searchPonto" placeholder="Buscar por POINT NAME ou descrição..." oninput="filtrarPontos()">
+        </div>
+        <div id="listaPontos"></div>
+      </div>
+    </div>
+
+    <!-- ============= FORMULÁRIO PONTO ============= -->
+    <div id="view-formPonto" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2 id="formPontoTitulo">Ponto</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarPontos()">← Voltar</button>
+        </div>
+        <div id="alertFormPonto"></div>
+        <form id="formPonto"></form>
+      </div>
+
+      <div class="card" id="historicoPontoCard">
+        <h3>Histórico</h3>
+        <div id="historicoPonto"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lgpd"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/utils.js"></script>
+  <script>
+    const session = AUTH.require(['supervisor', 'gestao', 'campo']);
+    if (!session) { throw new Error('no session'); }
+    document.getElementById('header').innerHTML = AUTH.renderHeader('Interface Campo', 'Registro de manutenção em campo');
+    document.getElementById('lgpd').innerHTML = AUTH.renderLgpdFooter();
+
+    let CONTRATOS = [];
+    let CONTRATO_ATUAL = null;
+    let LOJAS = [];
+    let LOJAS_FILTRADAS = [];
+    let PONTOS = [];
+    let PONTOS_FILTRADOS = [];
+    let LOJA_ATUAL = null;
+    let PONTO_ATUAL = null;
+    let HEADERS_LOJA = [];
+    let HEADERS_PONTO = [];
+
+    // Dropdowns para Tipo A (Shopping)
+    const DROPDOWNS_LOJA = {
+      'PISO': ['L1', 'L2', 'L3', 'SS', 'EXTERNO'],
+      'STATUS': ['CONFORME', 'PENDÊNCIA', 'ALARME', 'A VERIFICAR', 'FECHADA'],
+      'POSSUI MÓDULO': ['SIM', 'NÃO'],
+      'TIPO DISP': ['ME (FDCI181)', 'MZ (FDCI183)', 'I/O (FDCIO181)'],
+      'FONTE 24V': ['SIM', 'NÃO', 'N/A'],
+      '220VAC': ['SIM', 'NÃO', 'N/A'],
+      'CABO LOJA': ['SIM', 'NÃO'],
+      'INTERLIGADA': ['SIM', 'NÃO', 'N/A'],
+      'POSSUI CENTRAL': ['SIM', 'NÃO']
+    };
+
+    const DROPDOWNS_PONTO = {
+      'VISITA': ['REALIZADA', 'PENDENTE', 'N/A'],
+      'DEVICE TYPE': ['PHOTO', 'IAM', 'PULL', 'SMOKE', 'FIRE', 'TROUBLE', 'SUPERV', 'SIG4', 'RELAY', 'UNUSED', 'LINEAR', 'BATERIA'],
+      'POINT TYPE': ['SMOKE', 'PULL', 'SUPERV', 'FIRE', 'TROUBLE', 'UNUSED']
+    };
+
+    function show(viewId) {
+      ['view-contratos', 'view-lojas', 'view-formLoja', 'view-pontos', 'view-formPonto'].forEach(v => {
+        document.getElementById(v).classList.toggle('hidden', v !== viewId);
+      });
+      window.scrollTo(0, 0);
+    }
+
+    // ============= CONTRATOS =============
+    async function carregarContratos() {
+      Utils.showLoading();
+      const res = await API.call('listarContratos');
+      Utils.hideLoading();
+      CONTRATOS = res.contratos || [];
+
+      const div = document.getElementById('listaContratos');
+      if (!res.ok) { div.innerHTML = '<div class="alert alert-error">' + res.error + '</div>'; return; }
+      if (CONTRATOS.length === 0) { div.innerHTML = '<p class="text-muted">Nenhum contrato disponível.</p>'; return; }
+
+      let html = '';
+      CONTRATOS.forEach(c => {
+        const label = c.tipoContrato === 'A' ? 'Shopping (lojas)' : 'Industrial (pontos)';
+        html += `<div class="list-item" onclick="selecionarContrato('${c.id}')">
+          <div class="title">${Utils.escapeHtml(c.nome)}</div>
+          <div class="meta">
+            <span>${Utils.escapeHtml(c.tipoServico)}</span>
+            <span>•</span>
+            <span>${label}</span>
+          </div>
+        </div>`;
+      });
+      div.innerHTML = html;
+    }
+
+    function voltarContratos() {
+      show('view-contratos');
+      CONTRATO_ATUAL = null;
+    }
+
+    async function selecionarContrato(id) {
+      CONTRATO_ATUAL = CONTRATOS.find(c => c.id === id);
+      if (!CONTRATO_ATUAL) return;
+      Utils.setContrato(CONTRATO_ATUAL);
+      if (CONTRATO_ATUAL.tipoContrato === 'A') {
+        await carregarLojas();
+      } else {
+        await carregarPontos();
+      }
+    }
+
+    // ============= TIPO A - LOJAS =============
+    async function carregarLojas() {
+      show('view-lojas');
+      document.getElementById('lojasTitulo').textContent = CONTRATO_ATUAL.nome;
+      Utils.showLoading();
+      const res = await API.call('listarLojas', { contratoId: CONTRATO_ATUAL.id });
+      Utils.hideLoading();
+      if (!res.ok) {
+        document.getElementById('listaLojas').innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
+        return;
+      }
+      HEADERS_LOJA = res.headers;
+      LOJAS = res.lojas;
+      LOJAS_FILTRADAS = LOJAS.slice();
+      renderLojas();
+    }
+
+    function filtrarLojas() {
+      const q = document.getElementById('searchLoja').value.trim().toLowerCase();
+      LOJAS_FILTRADAS = !q ? LOJAS.slice() : LOJAS.filter(l => {
+        return String(l.LUC || '').toLowerCase().includes(q) ||
+               String(l.LOJAS || '').toLowerCase().includes(q);
+      });
+      renderLojas();
+    }
+
+    function renderLojas() {
+      const div = document.getElementById('listaLojas');
+      if (LOJAS_FILTRADAS.length === 0) { div.innerHTML = '<p class="text-muted">Nenhuma loja.</p>'; return; }
+      let html = '';
+      LOJAS_FILTRADAS.slice(0, 200).forEach(l => {
+        const status = String(l.STATUS || '').toUpperCase();
+        const statusCls = Utils.statusClass(status);
+        html += `<div class="list-item" onclick="abrirLoja('${Utils.escapeHtml(l.LUC)}')">
+          <div class="title">LUC ${Utils.escapeHtml(l.LUC)} — ${Utils.escapeHtml(l.LOJAS)}</div>
+          <div class="meta">
+            <span>Piso ${Utils.escapeHtml(l.PISO || '-')}</span>
+            <span>•</span>
+            <span class="status-badge ${statusCls}">${Utils.escapeHtml(status || 'SEM STATUS')}</span>
+          </div>
+        </div>`;
+      });
+      if (LOJAS_FILTRADAS.length > 200) {
+        html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 200 de ' + LOJAS_FILTRADAS.length + '. Use a busca.</p>';
+      }
+      div.innerHTML = html;
+    }
+
+    async function abrirLoja(luc) {
+      show('view-formLoja');
+      Utils.showLoading();
+      const res = await API.call('obterLoja', { contratoId: CONTRATO_ATUAL.id, luc: luc });
+      Utils.hideLoading();
+      if (!res.ok) {
+        document.getElementById('alertFormLoja').innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
+        return;
+      }
+      LOJA_ATUAL = res.loja;
+      document.getElementById('formLojaTitulo').textContent = 'LUC ' + luc + ' — ' + (res.loja.LOJAS || '');
+      renderFormLoja();
+      renderHistorico(res.loja._historico || [], 'historicoLoja');
+    }
+
+    function renderFormLoja() {
+      const form = document.getElementById('formLoja');
+      const campos = ['PISO', 'STATUS', 'POSSUI MÓDULO', 'TIPO DISP', 'ID', 'FONTE 24V', '220VAC', 'CABO LOJA', 'INTERLIGADA', 'POSSUI CENTRAL', 'TIPO DE CENTRAL', 'OBSERVAÇÃO'];
+
+      let html = '';
+      campos.forEach(c => {
+        if (HEADERS_LOJA.indexOf(c) === -1 && !HEADERS_LOJA.find(h => String(h).toUpperCase() === c.toUpperCase())) return;
+        const valor = LOJA_ATUAL[c] !== undefined ? LOJA_ATUAL[c] : (LOJA_ATUAL[c.toUpperCase()] || '');
+        html += '<div class="form-group">';
+        html += '<label class="form-label">' + c + '</label>';
+        if (DROPDOWNS_LOJA[c]) {
+          html += '<select class="form-control" data-campo="' + c + '">';
+          html += '<option value="">--</option>';
+          DROPDOWNS_LOJA[c].forEach(opt => {
+            html += '<option value="' + opt + '"' + (String(valor) === opt ? ' selected' : '') + '>' + opt + '</option>';
+          });
+          html += '</select>';
+        } else if (c === 'OBSERVAÇÃO') {
+          html += '<textarea class="form-control" data-campo="' + c + '" rows="3">' + Utils.escapeHtml(valor) + '</textarea>';
+        } else {
+          html += '<input type="text" class="form-control" data-campo="' + c + '" value="' + Utils.escapeHtml(valor) + '">';
+        }
+        html += '</div>';
+      });
+
+      html += `
+        <div class="form-group">
+          <label class="form-label">Foto do equipamento</label>
+          <label class="photo-input-wrap">
+            <input type="file" id="foto" accept="image/*" capture="environment" onchange="previewFoto(this)">
+            <div>📷 Clique para tirar ou selecionar foto</div>
+          </label>
+          <img id="fotoPreview" class="photo-preview hidden">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">💾 Salvar manutenção</button>
+      `;
+
+      form.innerHTML = html;
+      form.onsubmit = salvarLoja;
+    }
+
+    async function salvarLoja(e) {
+      e.preventDefault();
+      const campos = {};
+      document.querySelectorAll('#formLoja [data-campo]').forEach(el => {
+        campos[el.dataset.campo] = el.value;
+      });
+
+      // Auto-preencher DATA MANUT
+      const hoje = new Date();
+      if (HEADERS_LOJA.indexOf('DATA MANUT.') !== -1) campos['DATA MANUT.'] = hoje.toISOString().substring(0, 10);
+
+      const payload = {
+        contratoId: CONTRATO_ATUAL.id,
+        luc: LOJA_ATUAL.LUC,
+        campos: campos
+      };
+
+      const fotoInput = document.getElementById('foto');
+      if (fotoInput.files && fotoInput.files[0]) {
+        Utils.showLoading();
+        try {
+          const foto = await Utils.fileToCompressedBase64(fotoInput.files[0]);
+          payload.foto = foto;
+        } catch (err) { Utils.hideLoading(); Utils.toast('Erro ao processar foto', 'error'); return; }
+      } else {
+        Utils.showLoading();
+      }
+
+      const res = await API.call('salvarLoja', payload);
+      Utils.hideLoading();
+
+      if (res.ok) {
+        Utils.toast('Manutenção salva com sucesso', 'success');
+        setTimeout(() => carregarLojas(), 800);
+      } else {
+        document.getElementById('alertFormLoja').innerHTML = '<div class="alert alert-error">' + Utils.escapeHtml(res.error) + '</div>';
+      }
+    }
+
+    function voltarLojas() {
+      show('view-lojas');
+    }
+
+    // ============= TIPO B - PONTOS =============
+    async function carregarPontos() {
+      show('view-pontos');
+      document.getElementById('pontosTitulo').textContent = CONTRATO_ATUAL.nome;
+      Utils.showLoading();
+      const res = await API.call('listarPontos', { contratoId: CONTRATO_ATUAL.id });
+      Utils.hideLoading();
+      if (!res.ok) {
+        document.getElementById('listaPontos').innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
+        return;
+      }
+      HEADERS_PONTO = res.headers;
+      PONTOS = res.pontos;
+      PONTOS_FILTRADOS = PONTOS.slice();
+
+      // Preencher centrais
+      const centrais = [...new Set(PONTOS.map(p => p.CENTRAL).filter(Boolean))];
+      const sel = document.getElementById('filtroCentral');
+      sel.innerHTML = '<option value="">Todas as centrais</option>';
+      centrais.forEach(c => sel.innerHTML += `<option value="${c}">${c}</option>`);
+
+      renderPontos();
+    }
+
+    function filtrarPontos() {
+      const q = document.getElementById('searchPonto').value.trim().toLowerCase();
+      const central = document.getElementById('filtroCentral').value;
+      PONTOS_FILTRADOS = PONTOS.filter(p => {
+        if (central && String(p.CENTRAL) !== central) return false;
+        if (!q) return true;
+        return String(p['POINT NAME'] || '').toLowerCase().includes(q) ||
+               String(p['DESCRIÇÃO NA CENTRAL'] || p['DESCRICAO NA CENTRAL'] || '').toLowerCase().includes(q);
+      });
+      renderPontos();
+    }
+
+    function renderPontos() {
+      const div = document.getElementById('listaPontos');
+      if (PONTOS_FILTRADOS.length === 0) { div.innerHTML = '<p class="text-muted">Nenhum ponto.</p>'; return; }
+      let html = '';
+      PONTOS_FILTRADOS.slice(0, 200).forEach(p => {
+        const visita = String(p.VISITA || 'PENDENTE').toUpperCase();
+        const cls = visita === 'REALIZADA' ? 'status-CONFORME' : 'status-PENDENTE';
+        const desc = p['DESCRIÇÃO NA CENTRAL'] || p['DESCRICAO NA CENTRAL'] || '';
+        html += `<div class="list-item" onclick="abrirPonto('${Utils.escapeHtml(p['POINT NAME'])}')">
+          <div class="title">${Utils.escapeHtml(p['POINT NAME'])}</div>
+          <div class="meta">
+            <span>${Utils.escapeHtml(p['DEVICE TYPE'] || '-')}</span>
+            <span>•</span>
+            <span>${Utils.escapeHtml(desc).substring(0, 50)}</span>
+            <span>•</span>
+            <span class="status-badge ${cls}">${visita}</span>
+          </div>
+        </div>`;
+      });
+      if (PONTOS_FILTRADOS.length > 200) {
+        html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 200 de ' + PONTOS_FILTRADOS.length + '. Use os filtros.</p>';
+      }
+      div.innerHTML = html;
+    }
+
+    async function abrirPonto(pointName) {
+      show('view-formPonto');
+      Utils.showLoading();
+      const res = await API.call('obterPonto', { contratoId: CONTRATO_ATUAL.id, pointName: pointName });
+      Utils.hideLoading();
+      if (!res.ok) {
+        document.getElementById('alertFormPonto').innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
+        return;
+      }
+      PONTO_ATUAL = res.ponto;
+      document.getElementById('formPontoTitulo').textContent = pointName;
+      renderFormPonto();
+      renderHistorico(res.ponto._historico || [], 'historicoPonto');
+    }
+
+    function renderFormPonto() {
+      const form = document.getElementById('formPonto');
+      const campos = ['POINT NAME', 'DEVICE TYPE', 'POINT TYPE', 'DIP', 'DESCRIÇÃO NA CENTRAL', 'CENTRAL', 'LAÇO', 'PERÍODO', 'VISITA', 'DATA MANUTENÇÃO', 'DATA PRÓX MANUTENÇÃO', 'TÉCNICO', 'OBSERVAÇÃO'];
+
+      let html = '';
+      campos.forEach(c => {
+        if (HEADERS_PONTO.indexOf(c) === -1) return;
+        const valor = PONTO_ATUAL[c] !== undefined ? PONTO_ATUAL[c] : '';
+        const readonly = ['POINT NAME', 'DIP', 'DESCRIÇÃO NA CENTRAL', 'CENTRAL', 'LAÇO', 'PERÍODO'].indexOf(c) !== -1;
+        html += '<div class="form-group">';
+        html += '<label class="form-label">' + c + '</label>';
+        if (DROPDOWNS_PONTO[c]) {
+          html += '<select class="form-control" data-campo="' + c + '"' + (readonly ? ' disabled' : '') + '>';
+          html += '<option value="">--</option>';
+          DROPDOWNS_PONTO[c].forEach(opt => {
+            html += '<option value="' + opt + '"' + (String(valor) === opt ? ' selected' : '') + '>' + opt + '</option>';
+          });
+          html += '</select>';
+        } else if (c === 'OBSERVAÇÃO') {
+          html += '<textarea class="form-control" data-campo="' + c + '" rows="3">' + Utils.escapeHtml(valor) + '</textarea>';
+        } else if (c === 'DATA MANUTENÇÃO' || c === 'DATA PRÓX MANUTENÇÃO') {
+          const dateVal = valor ? String(valor).substring(0, 10) : '';
+          html += '<input type="date" class="form-control" data-campo="' + c + '" value="' + dateVal + '">';
+        } else {
+          html += '<input type="text" class="form-control" data-campo="' + c + '" value="' + Utils.escapeHtml(valor) + '"' + (readonly ? ' readonly' : '') + '>';
+        }
+        html += '</div>';
+      });
+
+      html += `
+        <div class="form-group">
+          <label class="form-label">Foto</label>
+          <label class="photo-input-wrap">
+            <input type="file" id="fotoPonto" accept="image/*" capture="environment" onchange="previewFotoPonto(this)">
+            <div>📷 Clique para tirar ou selecionar foto</div>
+          </label>
+          <img id="fotoPreviewPonto" class="photo-preview hidden">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">💾 Salvar manutenção</button>
+      `;
+
+      form.innerHTML = html;
+      form.onsubmit = salvarPonto;
+    }
+
+    async function salvarPonto(e) {
+      e.preventDefault();
+      const campos = {};
+      document.querySelectorAll('#formPonto [data-campo]').forEach(el => {
+        if (!el.disabled && !el.readOnly) campos[el.dataset.campo] = el.value;
+      });
+
+      const payload = {
+        contratoId: CONTRATO_ATUAL.id,
+        pointName: PONTO_ATUAL['POINT NAME'],
+        campos: campos
+      };
+
+      const fotoInput = document.getElementById('fotoPonto');
+      if (fotoInput.files && fotoInput.files[0]) {
+        Utils.showLoading();
+        try {
+          const foto = await Utils.fileToCompressedBase64(fotoInput.files[0]);
+          payload.foto = foto;
+        } catch (err) { Utils.hideLoading(); Utils.toast('Erro ao processar foto', 'error'); return; }
+      } else {
+        Utils.showLoading();
+      }
+
+      const res = await API.call('salvarPonto', payload);
+      Utils.hideLoading();
+
+      if (res.ok) {
+        Utils.toast('Manutenção registrada', 'success');
+        setTimeout(() => carregarPontos(), 800);
+      } else {
+        document.getElementById('alertFormPonto').innerHTML = '<div class="alert alert-error">' + Utils.escapeHtml(res.error) + '</div>';
+      }
+    }
+
+    function voltarPontos() {
+      show('view-pontos');
+    }
+
+    // ============= HISTÓRICO =============
+    function renderHistorico(historico, elId) {
+      const div = document.getElementById(elId);
+      if (!historico || historico.length === 0) {
+        div.innerHTML = '<p class="text-muted" style="font-size:13px">Sem histórico.</p>';
+        return;
+      }
+      let html = '';
+      historico.forEach(h => {
+        let dadosParsed = {};
+        try { dadosParsed = JSON.parse(h.dados || '{}'); } catch(e) {}
+        const obs = dadosParsed.observacao || '';
+        html += `<div class="history-item">
+          <div class="ts">${Utils.formatDate(h.timestamp)}</div>
+          <div><span class="tech">${Utils.escapeHtml(h.tecnico)}</span> · ${Utils.escapeHtml(h.acao)}</div>
+          ${obs ? '<div style="margin-top:4px;font-size:12px">' + Utils.escapeHtml(obs) + '</div>' : ''}
+          ${h.fotoUrl ? '<div style="margin-top:4px"><a href="' + h.fotoUrl + '" target="_blank" style="font-size:12px">📷 Ver foto</a></div>' : ''}
+        </div>`;
+      });
+      div.innerHTML = html;
+    }
+
+    // ============= FOTO PREVIEW =============
+    window.previewFoto = function(input) {
+      const img = document.getElementById('fotoPreview');
+      if (input.files && input.files[0]) {
+        const r = new FileReader();
+        r.onload = e => { img.src = e.target.result; img.classList.remove('hidden'); };
+        r.readAsDataURL(input.files[0]);
+      }
+    };
+    window.previewFotoPonto = function(input) {
+      const img = document.getElementById('fotoPreviewPonto');
+      if (input.files && input.files[0]) {
+        const r = new FileReader();
+        r.onload = e => { img.src = e.target.result; img.classList.remove('hidden'); };
+        r.readAsDataURL(input.files[0]);
+      }
+    };
+
+    // INIT
+    carregarContratos();
+  </script>
+</body>
+</html>
