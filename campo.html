@@ -288,7 +288,13 @@
       e.preventDefault();
       const campos = {};
       document.querySelectorAll('#formLoja [data-campo]').forEach(el => {
-        campos[el.dataset.campo] = el.value;
+        const nome = el.dataset.campo;
+        const novo = el.value;
+        const atual = LOJA_ATUAL[nome];
+        // Só envia se o valor mudou (evita sobrescrever com string vazia)
+        if (String(novo).trim() !== String(atual || '').trim()) {
+          campos[nome] = novo;
+        }
       });
 
       // Auto-preencher DATA MANUT
@@ -452,7 +458,13 @@
       e.preventDefault();
       const campos = {};
       document.querySelectorAll('#formPonto [data-campo]').forEach(el => {
-        if (!el.disabled && !el.readOnly) campos[el.dataset.campo] = el.value;
+        if (el.disabled || el.readOnly) return;
+        const nome = el.dataset.campo;
+        const novo = el.value;
+        const atual = PONTO_ATUAL[nome];
+        if (String(novo).trim() !== String(atual || '').trim()) {
+          campos[nome] = novo;
+        }
       });
 
       const payload = {
