@@ -76,6 +76,87 @@ html, body {
 }
 .header button.logout:hover { background: rgba(255,255,255,0.2); }
 
+/* Sino de notificações */
+.bell-btn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+  padding: 4px 6px;
+  font-size: 16px;
+  margin-right: 4px;
+}
+.bell-btn:hover { background: rgba(255,255,255,0.1); border-radius: 6px; }
+.bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: var(--alarme);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1;
+}
+.alerts-panel {
+  position: absolute;
+  top: 70px;
+  right: 20px;
+  width: 360px;
+  max-height: 480px;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  z-index: 500;
+  color: var(--text);
+}
+.alerts-header {
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: #fff;
+}
+.alerts-group {
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: #fafbfc;
+}
+.alerts-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.alerts-item:last-child { border-bottom: none; }
+.alerts-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #fff;
+}
+.alerts-tag.alarme { background: var(--alarme); }
+.alerts-tag.pendencia { background: var(--pendencia); }
+.alerts-id { font-weight: 600; color: var(--dark); }
+.alerts-name { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alerts-date { font-size: 10px; color: var(--text-muted); }
+
 /* ================= CONTAINER ================= */
 .container {
   max-width: 1200px;

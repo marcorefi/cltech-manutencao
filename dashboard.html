@@ -9,6 +9,8 @@
   <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
   <link rel="stylesheet" href="assets/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <style>
     .progress-wrap { background: #e2e8f0; height: 24px; border-radius: 12px; overflow: hidden; margin-top: 10px; }
     .progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary), var(--conforme)); color: #fff; text-align: center; font-size: 12px; font-weight: 700; line-height: 24px; transition: width 0.6s; }
@@ -25,7 +27,8 @@
   <div class="container">
     <div class="mobile-nav">
       <a href="supervisor.html">← Supervisor</a>
-      <a href="#" onclick="exportarCSV()">Exportar CSV</a>
+      <a href="#" onclick="exportarCSV(); return false;">Exportar CSV</a>
+      <a href="#" onclick="exportarPDF(); return false;">📄 Relatório PDF</a>
     </div>
 
     <div class="card">
@@ -448,6 +451,120 @@
         html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 500 de ' + LINHAS_FILTRADAS.length + '.</p>';
       }
       div.innerHTML = html;
+    }
+
+    async function exportarPDF() {
+      if (!DADOS || !CONTRATO_ATUAL) return;
+      Utils.showLoading();
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const pageW = doc.internal.pageSize.getWidth();
+
+        // Cabeçalho
+        doc.setFillColor(13, 27, 42);
+        doc.rect(0, 0, pageW, 28, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('CLTECH Fire', 14, 12);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Relatório de Manutenção', 14, 19);
+        doc.setFontSize(8);
+        doc.text('CNPJ: 30.452.788/0001-38', pageW - 14, 12, { align: 'right' });
+        doc.text(new Date().toLocaleString('pt-BR'), pageW - 14, 19, { align: 'right' });
+
+        let y = 38;
+        doc.setTextColor(13, 27, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.text(CONTRATO_ATUAL.nome, 14, y);
+        y += 6;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(100, 116, 139);
+        const subt = CONTRATO_ATUAL.tipoServico + ' — ' + (CONTRATO_ATUAL.tipoContrato === 'A' ? 'Shopping' : 'Industrial');
+        doc.text(subt, 14, y);
+        y += 10;
+
+        // KPIs
+        doc.setTextColor(13, 27, 42);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Indicadores', 14, y);
+        y += 5;
+
+        let kpis;
+        if (DADOS.tipoContrato === 'A') {
+          const s = DADOS.byStatus || {};
+          kpis = [
+            ['Total lojas', DADOS.total],
+            ['Conformes', s.CONFORME || 0],
+            ['Pendências', (s.PENDÊNCIA || 0) + (s.PENDENCIA || 0)],
+            ['Alarmes', s.ALARME || 0],
+            ['Fechadas', s.FECHADA || 0],
+            ['Interligadas', DADOS.interligadas + ' (' + (DADOS.total ? Math.round(DADOS.interligadas/DADOS.total*100) : 0) + '%)']
+          ];
+        } else {
+          const v = DADOS.byVisita || {};
+          const realizadas = v.REALIZADA || 0;
+          kpis = [
+            ['Total pontos', DADOS.total],
+            ['Realizadas', realizadas],
+            ['Pendentes', v.PENDENTE || 0],
+            ['% Concluído', (DADOS.total ? Math.round(realizadas/DADOS.total*100) : 0) + '%'],
+            ['Centrais', Object.keys(DADOS.byCentral || {}).length],
+            ['Devices', Object.keys(DADOS.byDevice || {}).length]
+          ];
+        }
+
+        doc.autoTable({
+          startY: y, head: [['Indicador', 'Valor']], body: kpis,
+          theme: 'striped', styles: { fontSize: 9 },
+          headStyles: { fillColor: [46, 134, 193], textColor: 255 }
+        });
+        y = doc.lastAutoTable.finalY + 10;
+
+        // Tabela principal
+        const visible = DADOS.tipoContrato === 'A'
+          ? ['LUC','LOJAS','PISO','STATUS','POSSUI MÓDULO','INTERLIGADA']
+          : ['POINT NAME','DEVICE TYPE','CENTRAL','VISITA','DATA MANUTENÇÃO'];
+        const hdrs = visible.filter(h => HEADERS.indexOf(h) !== -1);
+        const body = LINHAS.slice(0, 300).map(r => hdrs.map(h => {
+          const v = r[h];
+          if (h === 'DATA MANUTENÇÃO' || h === 'DATA MANUT.') return v ? Utils.formatDateOnly(v) : '-';
+          return String(v == null ? '' : v);
+        }));
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Registros', 14, y);
+        y += 4;
+        doc.autoTable({
+          startY: y, head: [hdrs], body: body,
+          theme: 'grid', styles: { fontSize: 7 },
+          headStyles: { fillColor: [13, 27, 42], textColor: 255 }
+        });
+
+        // Rodapé LGPD em todas as páginas
+        const pages = doc.internal.pages.length - 1;
+        for (let i = 1; i <= pages; i++) {
+          doc.setPage(i);
+          doc.setFontSize(7);
+          doc.setTextColor(100, 116, 139);
+          doc.text('© 2026 CLTECH Fire · LGPD Lei 13.709/2018 · Dados técnicos · Acesso restrito', pageW / 2, 290, { align: 'center' });
+          doc.text('Página ' + i + ' / ' + pages, pageW - 14, 290, { align: 'right' });
+        }
+
+        const fileName = 'CLTECH_' + CONTRATO_ATUAL.id + '_' + new Date().toISOString().substring(0, 10) + '.pdf';
+        doc.save(fileName);
+        Utils.toast('PDF gerado', 'success');
+      } catch (e) {
+        Utils.toast('Erro ao gerar PDF: ' + e.message, 'error');
+      } finally {
+        Utils.hideLoading();
+      }
     }
 
     function exportarCSV() {
