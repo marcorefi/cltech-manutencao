@@ -27,7 +27,15 @@ window.API = (function() {
 
     const body = Object.assign({ action: action }, payload);
 
+    // Ações que podem ser enfileiradas quando offline (mutantes)
+    const QUEUEABLE = ['salvarLoja', 'salvarPonto', 'adicionarPonto', 'criarUsuario', 'atualizarUsuario', 'removerUsuario', 'criarContrato'];
+
     try {
+      if (!navigator.onLine && window.Offline && QUEUEABLE.indexOf(action) !== -1) {
+        await window.Offline.enqueue(action, payload);
+        return { ok: true, queued: true, offline: true, message: 'Ação enfileirada. Será sincronizada quando a conexão voltar.' };
+      }
+
       const res = await fetch(url, {
         method: 'POST',
         mode: 'cors',
@@ -45,7 +53,6 @@ window.API = (function() {
       }
 
       if (!json.ok && json.error) {
-        // Sessão expirada? Forçar logout
         if (json.error.indexOf('expirada') !== -1 || json.error.indexOf('inválido') !== -1) {
           if (window.AUTH) window.AUTH.logout(true);
         }
@@ -53,6 +60,13 @@ window.API = (function() {
 
       return json;
     } catch (err) {
+      // Erro de rede em ação mutante: enfileirar
+      if (window.Offline && QUEUEABLE.indexOf(action) !== -1) {
+        try {
+          await window.Offline.enqueue(action, payload);
+          return { ok: true, queued: true, offline: true, message: 'Ação enfileirada (rede indisponível).' };
+        } catch (e) {}
+      }
       return { ok: false, error: err.message || 'Erro de rede' };
     }
   }

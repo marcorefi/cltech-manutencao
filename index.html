@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0D1B2A">
   <title>Login · CLTECH Fire — Sistema de Manutenção</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
   <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
@@ -42,9 +44,11 @@
   </div>
 
   <script src="assets/js/config.js"></script>
+  <script src="assets/js/offline.js"></script>
   <script src="assets/js/api.js"></script>
   <script src="assets/js/auth.js"></script>
   <script src="assets/js/utils.js"></script>
+  <script src="assets/js/sw-register.js"></script>
   <script>
     // Preenche URL da API se existir
     document.getElementById('apiUrl').value = API.getUrl() || '';
