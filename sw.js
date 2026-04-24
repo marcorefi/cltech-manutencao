@@ -1,7 +1,7 @@
 // CLTECH Fire - Service Worker (offline + cache)
 // Versão 1.0
 
-const CACHE_VERSION = 'cltech-v1-2026-04-24';
+const CACHE_VERSION = 'cltech-v2-2026-04-24';
 const STATIC_ASSETS = [
   './',
   './index.html',
