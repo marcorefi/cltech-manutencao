@@ -1,4 +1,4 @@
-// CLTECH Fire - Registra Service Worker + inicializa offline queue
+﻿// GestorPrev - Registra Service Worker + inicializa offline queue
 (function() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

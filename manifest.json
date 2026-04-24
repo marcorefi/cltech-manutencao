@@ -1,7 +1,7 @@
 {
-  "name": "CLTECH Fire - Gestao de Manutencao",
-  "short_name": "CLTECH Manutencao",
-  "description": "Sistema de Gestao de Contratos de Manutencao SDAI - CLTECH Fire",
+  "name": "GestorPrev - Dashboard da Prevenção",
+  "short_name": "GestorPrev",
+  "description": "GestorPrev - Sistema de Controle de Manutenção de Prevenção e Combate a Incêndio",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

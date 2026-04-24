@@ -1,4 +1,4 @@
-// CLTECH Fire - Utilitários
+﻿// GestorPrev - Utilitários
 window.Utils = (function() {
   function escapeHtml(str) {
     if (str === null || str === undefined) return '';

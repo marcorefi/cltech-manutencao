@@ -1,4 +1,4 @@
-// CLTECH Fire - Gestão de sessão
+﻿// GestorPrev - Gestão de sessão
 window.AUTH = (function() {
   const KEY = window.APP_CONFIG.SESSION_KEY;
 
@@ -88,21 +88,28 @@ window.AUTH = (function() {
       cliente: 'Cliente'
     }[perfil] || perfil;
 
+    const homeUrl = {
+      supervisor: 'supervisor.html',
+      gestao: 'supervisor.html',
+      campo: 'campo.html',
+      cliente: 'cliente.html'
+    }[perfil] || 'index.html';
     return `
       <div class="header">
-        <div class="brand">
-          <div class="brand-logo"><img src="assets/img/cltech-shield.png" alt="CLTECH Fire"></div>
+        <a href="${homeUrl}" class="brand" title="Ir para o início" style="text-decoration:none;color:inherit">
+          <div class="brand-logo"><img src="assets/img/cltech-shield.png" alt="GestorPrev"></div>
           <div>
-            <h1>${titulo || 'CLTECH Fire'}</h1>
-            <div class="sub">${subtitulo || 'Sistema de Contratos de Manutenção'}</div>
+            <h1>${titulo || 'GestorPrev'}</h1>
+            <div class="sub">${subtitulo || 'Dashboard da Prevenção'}</div>
           </div>
-        </div>
+        </a>
         <div class="user-box">
+          <a href="${homeUrl}" class="header-btn" title="Início">🏠</a>
           <button class="bell-btn" id="bellBtn" onclick="AUTH.toggleAlerts()" title="Alertas">
             <span class="bell-ico">🔔</span>
             <span class="bell-badge" id="bellBadge" style="display:none">0</span>
           </button>
-          <span>${s.usuario.nome}</span>
+          <span class="user-name">${s.usuario.nome}</span>
           <span class="badge ${perfil}">${perfilLabel}</span>
           <button class="logout" onclick="AUTH.logout()">Sair</button>
         </div>
@@ -170,7 +177,7 @@ window.AUTH = (function() {
   function renderLgpdFooter() {
     return `
       <div class="lgpd-footer">
-        <strong>© 2026 CLTECH Fire</strong> — CNPJ: ${window.APP_CONFIG.CNPJ}<br>
+        <strong>© 2026 GestorPrev</strong> — ${window.APP_CONFIG.EMPRESA_FULL} · CNPJ: ${window.APP_CONFIG.CNPJ}<br>
         Sistema em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).<br>
         Os dados coletados são exclusivamente técnicos, destinados à gestão de manutenção,
         e não incluem dados pessoais sensíveis. Acesso restrito a usuários autorizados.

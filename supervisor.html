@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0D1B2A">
-  <title>Supervisor · CLTECH Fire</title>
+  <title>Supervisor · GestorPrev</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
   <link rel="stylesheet" href="assets/css/style.css?v=3">
@@ -14,37 +14,61 @@
 
   <div class="container">
     <div class="mobile-nav">
-      <a href="#usuarios" class="active" onclick="switchTab('usuarios', this)">Usuários</a>
-      <a href="#contratos" onclick="switchTab('contratos', this)">Contratos</a>
-      <a href="dashboard.html?contrato=shopping-parangaba">Dashboard Shopping</a>
-      <a href="campo.html">Interface Campo</a>
+      <a href="#contratos" class="active" onclick="switchTab('contratos', this)">📋 Contratos</a>
+      <a href="campo.html">📱 Interface Campo</a>
+      <a href="#config" onclick="switchTab('config', this)">⚙️ Configurações</a>
     </div>
 
-    <!-- ===================== USUÁRIOS ===================== -->
-    <div id="tab-usuarios">
-      <div class="card">
-        <div class="flex-between mb-md">
-          <h2>Usuários do sistema</h2>
-          <button class="btn btn-primary" onclick="abrirModalUsuario()">+ Novo usuário</button>
-        </div>
-        <p class="text-muted" style="font-size:12px;margin-bottom:12px">
-          Crie logins para Gestão, Campo ou Cliente. Cada perfil acessa apenas a página correspondente.
-        </p>
-        <div id="tabelaUsuarios"></div>
-      </div>
-    </div>
-
-    <!-- ===================== CONTRATOS ===================== -->
-    <div id="tab-contratos" class="hidden">
+    <!-- ===================== CONTRATOS (aba inicial) ===================== -->
+    <div id="tab-contratos">
       <div class="card">
         <div class="flex-between mb-md">
           <h2>Contratos ativos</h2>
-          <button class="btn btn-primary" onclick="abrirModalContrato()">+ Novo contrato</button>
+          <span class="text-muted" style="font-size:13px" id="contratosCount"></span>
         </div>
         <p class="text-muted" style="font-size:12px;margin-bottom:12px">
-          Cada contrato pode ser SDAI, Bombas, Iluminação, Extintores, etc. Tipo A = Shopping (lojas), Tipo B = Industrial (pontos).
+          Clique em um contrato para abrir o dashboard gerencial daquele cliente.
         </p>
         <div id="tabelaContratos"></div>
+      </div>
+    </div>
+
+    <!-- ===================== CONFIGURAÇÕES (submenu) ===================== -->
+    <div id="tab-config" class="hidden">
+      <div class="card">
+        <h2>⚙️ Configurações</h2>
+        <p class="text-muted" style="font-size:12px;margin-bottom:12px">
+          Painel administrativo: usuários do sistema, cadastro de novos contratos e preferências gerais.
+        </p>
+        <div class="config-grid">
+          <button class="config-card" onclick="switchSubConfig('usuarios')">
+            <div class="config-ico">👥</div>
+            <div class="config-title">Usuários</div>
+            <div class="config-desc">Gerenciar logins de gestão, campo e clientes</div>
+          </button>
+          <button class="config-card" onclick="abrirModalContrato()">
+            <div class="config-ico">➕</div>
+            <div class="config-title">Cadastrar novo contrato</div>
+            <div class="config-desc">Adicionar contrato SDAI, bombas, iluminação, etc.</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- ===================== USUÁRIOS (dentro de Config) ===================== -->
+      <div id="sub-usuarios" class="hidden">
+        <div class="card">
+          <div class="flex-between mb-md">
+            <h3>Usuários do sistema</h3>
+            <div class="flex gap-sm">
+              <button class="btn btn-ghost btn-sm" onclick="switchSubConfig('')">← Voltar</button>
+              <button class="btn btn-primary" onclick="abrirModalUsuario()">+ Novo usuário</button>
+            </div>
+          </div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:12px">
+            Crie logins para Gestão, Campo ou Cliente. Cada perfil acessa apenas a página correspondente.
+          </p>
+          <div id="tabelaUsuarios"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -174,8 +198,15 @@
     function switchTab(tab, el) {
       document.querySelectorAll('.mobile-nav a').forEach(a => a.classList.remove('active'));
       if (el) el.classList.add('active');
-      document.getElementById('tab-usuarios').classList.toggle('hidden', tab !== 'usuarios');
       document.getElementById('tab-contratos').classList.toggle('hidden', tab !== 'contratos');
+      document.getElementById('tab-config').classList.toggle('hidden', tab !== 'config');
+      if (tab === 'config') switchSubConfig('');
+    }
+
+    function switchSubConfig(sub) {
+      document.getElementById('sub-usuarios').classList.toggle('hidden', sub !== 'usuarios');
+      // Se abriu usuarios, carrega a lista
+      if (sub === 'usuarios') carregarUsuarios();
     }
 
     async function carregarUsuarios() {
@@ -220,15 +251,32 @@
         div.innerHTML = '<div class="alert alert-error">' + res.error + '</div>';
         return;
       }
+      document.getElementById('contratosCount').textContent = CONTRATOS.length + ' contrato' + (CONTRATOS.length !== 1 ? 's' : '');
       if (CONTRATOS.length === 0) {
-        div.innerHTML = '<p class="text-muted">Nenhum contrato cadastrado.</p>';
+        div.innerHTML = '<p class="text-muted">Nenhum contrato cadastrado. Abra <strong>Configurações</strong> para criar o primeiro.</p>';
         return;
       }
-      let html = '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>ID</th><th>Serviço</th><th>Tipo</th><th>Status</th><th></th></tr></thead><tbody>';
+      // Cards grandes e clicáveis
+      let html = '<div class="contrato-grid">';
       CONTRATOS.forEach(c => {
-        const linkDash = c.tipoContrato === 'A'
-          ? `<a href="dashboard.html?contrato=${encodeURIComponent(c.id)}" class="btn btn-ghost btn-sm">Dashboard</a>`
-          : `<a href="dashboard.html?contrato=${encodeURIComponent(c.id)}" class="btn btn-ghost btn-sm">Dashboard</a>`;
+        const tipoLabel = c.tipoContrato === 'A' ? 'Shopping · Lojas' : 'Industrial · Pontos';
+        const icone = c.tipoContrato === 'A' ? '🏬' : '🏭';
+        html += `<a href="dashboard.html?contrato=${encodeURIComponent(c.id)}" class="contrato-card">
+          <div class="contrato-ico">${icone}</div>
+          <div class="contrato-nome">${Utils.escapeHtml(c.nome)}</div>
+          <div class="contrato-meta">
+            <span class="badge-servico">${Utils.escapeHtml(c.tipoServico)}</span>
+            <span class="contrato-tipo">${tipoLabel}</span>
+          </div>
+          <div class="contrato-cta">Abrir dashboard →</div>
+        </a>`;
+      });
+      html += '</div>';
+      return void (div.innerHTML = html);
+      // (bloco antigo abaixo mantido inacessível — fallback)
+      html = '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>ID</th><th>Serviço</th><th>Tipo</th><th>Status</th><th></th></tr></thead><tbody>';
+      CONTRATOS.forEach(c => {
+        const linkDash = `<a href="dashboard.html?contrato=${encodeURIComponent(c.id)}" class="btn btn-ghost btn-sm">Dashboard</a>`;
         html += `<tr>
           <td><strong>${Utils.escapeHtml(c.nome)}</strong></td>
           <td><code>${Utils.escapeHtml(c.id)}</code></td>
@@ -368,7 +416,8 @@
     });
 
     // INIT
-    carregarContratos().then(carregarUsuarios);
+    // Carrega só contratos (aba default). Usuários só quando entrar em Configurações → Usuários.
+    carregarContratos();
   </script>
 </body>
 </html>

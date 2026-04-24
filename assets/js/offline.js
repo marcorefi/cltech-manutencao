@@ -1,4 +1,4 @@
-// CLTECH Fire - Fila offline (IndexedDB) + sincronização
+﻿// GestorPrev - Fila offline (IndexedDB) + sincronização
 // Uso:
 //   await Offline.init()
 //   Offline.enqueue(action, payload) — se offline ou falha de rede

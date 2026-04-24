@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0D1B2A">
-  <title>Campo · CLTECH Fire</title>
+  <title>Campo · GestorPrev</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
   <link rel="stylesheet" href="assets/css/style.css?v=3">
@@ -22,17 +22,92 @@
       </div>
     </div>
 
+    <!-- ============= MENU DO CONTRATO (Tipo A) ============= -->
+    <div id="view-menuContrato" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2 id="menuContratoTitulo">Contrato</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarContratos()">← Voltar</button>
+        </div>
+        <p class="text-muted" style="font-size:13px;margin-bottom:12px">O que deseja fazer neste contrato?</p>
+        <div class="menu-campo-grid">
+          <button class="menu-campo-card" onclick="irParaLojas()">
+            <div class="menu-campo-ico">🏪</div>
+            <div class="menu-campo-title">Lojas</div>
+            <div class="menu-campo-desc">Manutenção nas lojas do shopping</div>
+          </button>
+          <button class="menu-campo-card" onclick="carregarEquipamentos()">
+            <div class="menu-campo-ico">🏢</div>
+            <div class="menu-campo-title">Equipamentos</div>
+            <div class="menu-campo-desc">Acionadores, detectores, sirenes das áreas comuns</div>
+          </button>
+          <a class="menu-campo-card" id="btnAbrirDashboard" href="#" onclick="abrirDashboard(); return false;">
+            <div class="menu-campo-ico">📊</div>
+            <div class="menu-campo-title">Dashboard</div>
+            <div class="menu-campo-desc">KPIs + pesquisa de lojas e equipamentos</div>
+          </a>
+        </div>
+      </div>
+    </div>
+
     <!-- ============= LISTA DE LOJAS (Tipo A) ============= -->
     <div id="view-lojas" class="hidden">
       <div class="card">
         <div class="flex-between mb-md">
           <h2 id="lojasTitulo">Lojas</h2>
-          <button class="btn btn-ghost btn-sm" onclick="voltarContratos()">← Voltar</button>
+          <button class="btn btn-ghost btn-sm" onclick="voltarMenuContrato()">← Voltar</button>
         </div>
         <div class="search-box">
           <input type="search" id="searchLoja" placeholder="Buscar por LUC ou nome..." oninput="filtrarLojas()">
         </div>
         <div id="listaLojas"></div>
+      </div>
+    </div>
+
+    <!-- ============= LISTA DE EQUIPAMENTOS SHOPPING ============= -->
+    <div id="view-equipamentos" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2>Equipamentos do Shopping</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarMenuContrato()">← Voltar</button>
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select id="filtroEquipCategoria" class="form-control" onchange="filtrarEquipamentosLista()">
+              <option value="">Todas as categorias</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Piso</label>
+            <select id="filtroEquipPiso" class="form-control" onchange="filtrarEquipamentosLista()">
+              <option value="">Todos os pisos</option>
+            </select>
+          </div>
+        </div>
+        <div class="search-box">
+          <input type="search" id="searchEquipCampo" placeholder="Buscar por local, ID ou tipo..." oninput="filtrarEquipamentosLista()">
+        </div>
+        <div id="listaEquipamentos"></div>
+        <div class="text-center" style="margin-top:10px">
+          <button id="btnMaisEquip" class="btn btn-ghost btn-sm hidden" onclick="mostrarMaisEquip()">Mostrar mais</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============= FORMULÁRIO EQUIPAMENTO ============= -->
+    <div id="view-formEquip" class="hidden">
+      <div class="card">
+        <div class="flex-between mb-md">
+          <h2 id="formEquipTitulo">Equipamento</h2>
+          <button class="btn btn-ghost btn-sm" onclick="voltarListaEquip()">← Voltar</button>
+        </div>
+        <div id="alertFormEquip"></div>
+        <form id="formEquip"></form>
+      </div>
+      <div class="card">
+        <h3>Histórico</h3>
+        <div id="historicoEquip"></div>
       </div>
     </div>
 
@@ -136,10 +211,178 @@
     };
 
     function show(viewId) {
-      ['view-contratos', 'view-lojas', 'view-formLoja', 'view-pontos', 'view-formPonto'].forEach(v => {
-        document.getElementById(v).classList.toggle('hidden', v !== viewId);
+      ['view-contratos', 'view-menuContrato', 'view-lojas', 'view-formLoja', 'view-pontos', 'view-formPonto', 'view-equipamentos', 'view-formEquip'].forEach(v => {
+        const el = document.getElementById(v);
+        if (el) el.classList.toggle('hidden', v !== viewId);
       });
       window.scrollTo(0, 0);
+    }
+
+    // === Equipamentos Shopping (Tipo A) ===
+    let EQUIPS_CAMPO = [];
+    let EQUIPS_CAMPO_FILT = [];
+    let EQUIP_LIMIT = 50;
+    let EQUIP_ATUAL = null;
+
+    async function carregarEquipamentos() {
+      show('view-equipamentos');
+      Utils.showLoading();
+      const res = await API.call('listarEquipamentosShopping', { contratoId: CONTRATO_ATUAL.id });
+      Utils.hideLoading();
+      if (!res.ok) {
+        document.getElementById('listaEquipamentos').innerHTML = '<div class="alert alert-error">' + Utils.escapeHtml(res.error) + '</div>';
+        return;
+      }
+      EQUIPS_CAMPO = res.equipamentos || [];
+      EQUIPS_CAMPO_FILT = EQUIPS_CAMPO.slice();
+      EQUIP_LIMIT = 50;
+
+      // Popular filtros
+      const cats = [...new Set(EQUIPS_CAMPO.map(e => e.categoria).filter(Boolean))];
+      const pisos = [...new Set(EQUIPS_CAMPO.map(e => e.piso).filter(Boolean))];
+      const selCat = document.getElementById('filtroEquipCategoria');
+      selCat.innerHTML = '<option value="">Todas as categorias</option>' + cats.map(c => `<option value="${Utils.escapeHtml(c)}">${Utils.escapeHtml(c)}</option>`).join('');
+      const selPiso = document.getElementById('filtroEquipPiso');
+      selPiso.innerHTML = '<option value="">Todos os pisos</option>' + pisos.map(p => `<option value="${Utils.escapeHtml(p)}">${Utils.escapeHtml(p)}</option>`).join('');
+      renderEquipamentos();
+    }
+
+    function filtrarEquipamentosLista() {
+      const q = document.getElementById('searchEquipCampo').value.trim().toLowerCase();
+      const cat = document.getElementById('filtroEquipCategoria').value;
+      const piso = document.getElementById('filtroEquipPiso').value;
+      EQUIP_LIMIT = 50;
+      EQUIPS_CAMPO_FILT = EQUIPS_CAMPO.filter(e => {
+        if (cat && e.categoria !== cat) return false;
+        if (piso && e.piso !== piso) return false;
+        if (!q) return true;
+        return String(e.local || '').toLowerCase().includes(q) ||
+               String(e.id || '').toLowerCase().includes(q) ||
+               String(e.tipo || '').toLowerCase().includes(q);
+      });
+      renderEquipamentos();
+    }
+
+    function renderEquipamentos() {
+      const div = document.getElementById('listaEquipamentos');
+      if (!EQUIPS_CAMPO_FILT.length) { div.innerHTML = '<p class="text-muted">Nenhum equipamento encontrado.</p>'; return; }
+      let html = '';
+      EQUIPS_CAMPO_FILT.slice(0, EQUIP_LIMIT).forEach((e, idx) => {
+        const dataFmt = e.data ? Utils.formatDateOnly(e.data) : 'sem manutenção';
+        html += `<div class="list-item" onclick="abrirEquip(${idx})">
+          <div class="title">${Utils.escapeHtml(e.local)}</div>
+          <div class="meta">
+            <span>${Utils.escapeHtml(e.categoria || '-')}</span>
+            <span>•</span>
+            <span>Piso ${Utils.escapeHtml(e.piso || '-')}</span>
+            <span>•</span>
+            <span>${Utils.escapeHtml(e.tipo || '-')}</span>
+            <span>•</span>
+            <span>Últ: ${dataFmt}</span>
+          </div>
+        </div>`;
+      });
+      div.innerHTML = html;
+      const btnMais = document.getElementById('btnMaisEquip');
+      if (EQUIPS_CAMPO_FILT.length > EQUIP_LIMIT) {
+        btnMais.classList.remove('hidden');
+        btnMais.textContent = 'Mostrar mais (' + (EQUIPS_CAMPO_FILT.length - EQUIP_LIMIT) + ' restantes)';
+      } else {
+        btnMais.classList.add('hidden');
+      }
+    }
+
+    function mostrarMaisEquip() {
+      EQUIP_LIMIT += 100;
+      renderEquipamentos();
+    }
+
+    async function abrirEquip(idx) {
+      EQUIP_ATUAL = EQUIPS_CAMPO_FILT[idx];
+      if (!EQUIP_ATUAL) return;
+      show('view-formEquip');
+      document.getElementById('formEquipTitulo').textContent = EQUIP_ATUAL.local + (EQUIP_ATUAL.id ? ' (' + EQUIP_ATUAL.id + ')' : '');
+      renderFormEquip();
+      // Buscar histórico usando ID como identificador
+      const ident = EQUIP_ATUAL.id || EQUIP_ATUAL.local;
+      Utils.showLoading();
+      const hres = await API.call('historico', { contratoId: CONTRATO_ATUAL.id, identificador: ident });
+      Utils.hideLoading();
+      renderHistorico(hres.ok ? hres.historico : [], 'historicoEquip');
+    }
+
+    function renderFormEquip() {
+      const form = document.getElementById('formEquip');
+      const campos = [
+        { name: 'LOCAL DE INSTALAÇÃO', value: EQUIP_ATUAL.local, readonly: true },
+        { name: 'CATEGORIA', value: EQUIP_ATUAL.categoria || '', readonly: true },
+        { name: 'PISO', value: EQUIP_ATUAL.piso || '' },
+        { name: 'TIPO DISP', value: EQUIP_ATUAL.tipo || '' },
+        { name: 'ID', value: EQUIP_ATUAL.id || '' },
+        { name: 'DATA MANUT.', value: EQUIP_ATUAL.data, isDate: true },
+        { name: 'OBS', value: EQUIP_ATUAL.obs || '', textarea: true }
+      ];
+      let html = '';
+      campos.forEach(c => {
+        html += '<div class="form-group">';
+        html += '<label class="form-label">' + c.name + '</label>';
+        if (c.textarea) {
+          html += '<textarea class="form-control" data-campo="' + c.name + '" rows="3">' + Utils.escapeHtml(c.value) + '</textarea>';
+        } else if (c.isDate) {
+          const v = c.value ? (new Date(c.value).toISOString().substring(0,10)) : '';
+          html += '<input type="date" class="form-control" data-campo="' + c.name + '" value="' + v + '">';
+        } else {
+          html += '<input type="text" class="form-control" data-campo="' + c.name + '" value="' + Utils.escapeHtml(c.value) + '"' + (c.readonly ? ' readonly' : '') + '>';
+        }
+        html += '</div>';
+      });
+      html += '<button type="submit" class="btn btn-primary btn-block">💾 Salvar manutenção</button>';
+      form.innerHTML = html;
+      form.onsubmit = salvarEquip;
+    }
+
+    async function salvarEquip(e) {
+      e.preventDefault();
+      const campos = {};
+      document.querySelectorAll('#formEquip [data-campo]').forEach(el => {
+        if (el.readOnly) return;
+        const nome = el.dataset.campo;
+        const novo = el.value;
+        // Só envia o que mudou
+        let atual;
+        if (nome === 'DATA MANUT.') atual = EQUIP_ATUAL.data ? new Date(EQUIP_ATUAL.data).toISOString().substring(0,10) : '';
+        else if (nome === 'PISO') atual = EQUIP_ATUAL.piso || '';
+        else if (nome === 'TIPO DISP') atual = EQUIP_ATUAL.tipo || '';
+        else if (nome === 'ID') atual = EQUIP_ATUAL.id || '';
+        else if (nome === 'OBS') atual = EQUIP_ATUAL.obs || '';
+        else atual = '';
+        if (String(novo).trim() !== String(atual || '').trim()) campos[nome] = novo;
+      });
+
+      Utils.showLoading();
+      const res = await API.call('salvarEquipamento', {
+        contratoId: CONTRATO_ATUAL.id,
+        equipamentoId: EQUIP_ATUAL.id || EQUIP_ATUAL.local,
+        localInstalacao: EQUIP_ATUAL.local,
+        campos: campos
+      });
+      Utils.hideLoading();
+      if (res.ok) {
+        Utils.toast('Equipamento atualizado', 'success');
+        setTimeout(() => carregarEquipamentos(), 800);
+      } else {
+        document.getElementById('alertFormEquip').innerHTML = '<div class="alert alert-error">' + Utils.escapeHtml(res.error) + '</div>';
+      }
+    }
+
+    function voltarListaEquip() { show('view-equipamentos'); }
+
+    // === Navegação geral ===
+    function voltarMenuContrato() { show('view-menuContrato'); }
+    function irParaLojas() { carregarLojas(); }
+    function abrirDashboard() {
+      if (!CONTRATO_ATUAL) return;
+      window.location.href = 'dashboard.html?contrato=' + encodeURIComponent(CONTRATO_ATUAL.id);
     }
 
     // ============= CONTRATOS =============
@@ -178,7 +421,11 @@
       if (!CONTRATO_ATUAL) return;
       Utils.setContrato(CONTRATO_ATUAL);
       if (CONTRATO_ATUAL.tipoContrato === 'A') {
-        await carregarLojas();
+        // Tipo A: mostra menu com Lojas / Equipamentos / Dashboard
+        show('view-menuContrato');
+        document.getElementById('menuContratoTitulo').textContent = CONTRATO_ATUAL.nome;
+        const btn = document.getElementById('btnAbrirDashboard');
+        if (btn) btn.href = 'dashboard.html?contrato=' + encodeURIComponent(CONTRATO_ATUAL.id);
       } else {
         await carregarPontos();
       }
@@ -333,9 +580,7 @@
       }
     }
 
-    function voltarLojas() {
-      show('view-lojas');
-    }
+    function voltarLojas() { show('view-lojas'); }
 
     // ============= TIPO B - PONTOS =============
     async function carregarPontos() {

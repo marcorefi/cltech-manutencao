@@ -1,7 +1,7 @@
-// CLTECH Fire - Service Worker (offline + cache)
+// GestorPrev - Service Worker (offline + cache)
 // Versão 1.0
 
-const CACHE_VERSION = 'cltech-v3-2026-04-24';
+const CACHE_VERSION = 'gestorprev-v1-2026-04-24';
 const STATIC_ASSETS = [
   './',
   './index.html',

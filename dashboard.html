@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0D1B2A">
-  <title>Dashboard · CLTECH Fire</title>
+  <title>Dashboard · GestorPrev</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
   <link rel="stylesheet" href="assets/css/style.css?v=3">
@@ -25,11 +25,18 @@
   <div id="header"></div>
 
   <div class="container">
-    <div class="mobile-nav">
-      <a href="supervisor.html">← Supervisor</a>
-      <a href="#" onclick="exportarCSV(); return false;">Exportar CSV</a>
-      <a href="#" onclick="exportarPDF(); return false;">📄 Relatório PDF</a>
-    </div>
+    <div class="mobile-nav" id="dashNav"></div>
+    <script>
+      (function() {
+        const s = JSON.parse(localStorage.getItem('cltech_session') || 'null');
+        const perfil = s && s.usuario ? s.usuario.perfil : '';
+        const voltar = perfil === 'campo' ? 'campo.html' : (perfil === 'cliente' ? 'cliente.html' : 'supervisor.html');
+        document.getElementById('dashNav').innerHTML =
+          '<a href="' + voltar + '">← Voltar</a>' +
+          '<a href="#" onclick="exportarCSV(); return false;">Exportar CSV</a>' +
+          '<a href="#" onclick="exportarPDF(); return false;">📄 Relatório PDF</a>';
+      })();
+    </script>
 
     <div class="card">
       <div class="flex-between mb-md">
@@ -118,7 +125,30 @@
           <h3>Lista de equipamentos</h3>
           <input type="search" id="searchEquip" placeholder="Buscar equipamento..." class="form-control" style="max-width:260px" oninput="filtrarEquipamentos()">
         </div>
+        <div class="form-row form-row-3" style="gap:10px">
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select id="filtroCatEquip" class="form-control" onchange="filtrarEquipamentos()">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Piso</label>
+            <select id="filtroPisoEquip" class="form-control" onchange="filtrarEquipamentos()">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select id="filtroTipoEquip" class="form-control" onchange="filtrarEquipamentos()">
+              <option value="">Todos</option>
+            </select>
+          </div>
+        </div>
         <div id="equipTabelaWrap"></div>
+        <div class="text-center" style="margin-top:12px">
+          <button id="btnMaisEquipDash" class="btn btn-ghost btn-sm hidden" onclick="mostrarMaisEquipDash()">Mostrar mais</button>
+        </div>
       </div>
     </div>
   </div>
@@ -132,7 +162,7 @@
   <script src="assets/js/utils.js?v=3"></script>
   <script src="assets/js/sw-register.js?v=3"></script>
   <script>
-    const session = AUTH.require(['supervisor', 'gestao']);
+    const session = AUTH.require(['supervisor', 'gestao', 'campo']);
     if (!session) { throw new Error('no session'); }
     document.getElementById('header').innerHTML = AUTH.renderHeader('Dashboard Gerencial', 'Indicadores e acompanhamento técnico');
     document.getElementById('lgpd').innerHTML = AUTH.renderLgpdFooter();
@@ -203,6 +233,7 @@
 
     let EQUIPS = [];
     let EQUIPS_FILT = [];
+    let EQUIP_DASH_LIMIT = 100;
     let CHART_EQUIP_CAT = null, CHART_EQUIP_TIPO = null;
 
     function renderEquipamentos() {
@@ -215,6 +246,15 @@
       const eq = DADOS.equipamentos;
       EQUIPS = eq.lista || [];
       EQUIPS_FILT = EQUIPS.slice();
+      EQUIP_DASH_LIMIT = 100;
+
+      // Popular filtros
+      const cats = [...new Set(EQUIPS.map(e => e.categoria).filter(Boolean))].sort();
+      const pisos = [...new Set(EQUIPS.map(e => e.piso).filter(Boolean))].sort();
+      const tipos = [...new Set(EQUIPS.map(e => e.tipo).filter(Boolean))].sort();
+      document.getElementById('filtroCatEquip').innerHTML = '<option value="">Todas</option>' + cats.map(c => `<option value="${Utils.escapeHtml(c)}">${Utils.escapeHtml(c)}</option>`).join('');
+      document.getElementById('filtroPisoEquip').innerHTML = '<option value="">Todos</option>' + pisos.map(p => `<option value="${Utils.escapeHtml(p)}">${Utils.escapeHtml(p)}</option>`).join('');
+      document.getElementById('filtroTipoEquip').innerHTML = '<option value="">Todos</option>' + tipos.map(t => `<option value="${Utils.escapeHtml(t)}">${Utils.escapeHtml(t)}</option>`).join('');
 
       // KPIs de equipamentos
       document.getElementById('equipKpis').innerHTML = '<div class="kpi-grid">' +
@@ -248,20 +288,34 @@
 
     function filtrarEquipamentos() {
       const q = document.getElementById('searchEquip').value.trim().toLowerCase();
-      EQUIPS_FILT = !q ? EQUIPS.slice() : EQUIPS.filter(e =>
-        String(e.local || '').toLowerCase().includes(q) ||
-        String(e.tipo || '').toLowerCase().includes(q) ||
-        String(e.id || '').toLowerCase().includes(q) ||
-        String(e.categoria || '').toLowerCase().includes(q)
-      );
+      const cat = document.getElementById('filtroCatEquip').value;
+      const piso = document.getElementById('filtroPisoEquip').value;
+      const tipo = document.getElementById('filtroTipoEquip').value;
+      EQUIP_DASH_LIMIT = 100;
+      EQUIPS_FILT = EQUIPS.filter(e => {
+        if (cat && e.categoria !== cat) return false;
+        if (piso && e.piso !== piso) return false;
+        if (tipo && e.tipo !== tipo) return false;
+        if (!q) return true;
+        return String(e.local || '').toLowerCase().includes(q) ||
+               String(e.tipo || '').toLowerCase().includes(q) ||
+               String(e.id || '').toLowerCase().includes(q) ||
+               String(e.categoria || '').toLowerCase().includes(q);
+      });
+      renderEquipTabela();
+    }
+
+    function mostrarMaisEquipDash() {
+      EQUIP_DASH_LIMIT += 200;
       renderEquipTabela();
     }
 
     function renderEquipTabela() {
       const div = document.getElementById('equipTabelaWrap');
-      if (!EQUIPS_FILT.length) { div.innerHTML = '<p class="text-muted">Nenhum equipamento.</p>'; return; }
+      const btn = document.getElementById('btnMaisEquipDash');
+      if (!EQUIPS_FILT.length) { div.innerHTML = '<p class="text-muted">Nenhum equipamento.</p>'; btn.classList.add('hidden'); return; }
       let html = '<div class="table-wrap"><table><thead><tr><th>Categoria</th><th>Local</th><th>Piso</th><th>Tipo</th><th>ID</th><th>Última manut.</th><th>Obs</th></tr></thead><tbody>';
-      EQUIPS_FILT.slice(0, 300).forEach(e => {
+      EQUIPS_FILT.slice(0, EQUIP_DASH_LIMIT).forEach(e => {
         html += '<tr><td>' + Utils.escapeHtml(e.categoria) + '</td>' +
                 '<td>' + Utils.escapeHtml(e.local) + '</td>' +
                 '<td>' + Utils.escapeHtml(e.piso) + '</td>' +
@@ -271,7 +325,14 @@
                 '<td>' + Utils.escapeHtml(e.obs || '') + '</td></tr>';
       });
       html += '</tbody></table></div>';
-      if (EQUIPS_FILT.length > 300) html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando 300 de ' + EQUIPS_FILT.length + '.</p>';
+      const restantes = EQUIPS_FILT.length - EQUIP_DASH_LIMIT;
+      if (restantes > 0) {
+        html += '<p class="text-muted text-center" style="font-size:12px;margin-top:10px">Mostrando ' + EQUIP_DASH_LIMIT + ' de ' + EQUIPS_FILT.length + '</p>';
+        btn.classList.remove('hidden');
+        btn.textContent = 'Mostrar mais (' + restantes + ' restantes)';
+      } else {
+        btn.classList.add('hidden');
+      }
       div.innerHTML = html;
     }
 
@@ -568,7 +629,7 @@
         doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
-        doc.text('CLTECH Fire', 14, 12);
+        doc.text('GestorPrev', 14, 12);
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.text('Relatório de Manutenção', 14, 19);
@@ -627,7 +688,58 @@
         });
         y = doc.lastAutoTable.finalY + 10;
 
+        // Gráficos embutidos (Chart.js → PNG → PDF)
+        const addChart = (chart, title, atY) => {
+          if (!chart) return atY;
+          try {
+            const img = chart.toBase64Image('image/png', 1.0);
+            if (atY > 210) { doc.addPage(); atY = 20; }
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(13, 27, 42);
+            doc.text(title, 14, atY);
+            atY += 4;
+            const imgW = pageW - 28;
+            const imgH = 70;
+            doc.addImage(img, 'PNG', 14, atY, imgW, imgH);
+            return atY + imgH + 8;
+          } catch (err) { return atY; }
+        };
+
+        const t1 = document.getElementById('chart1Title').textContent;
+        const t2 = document.getElementById('chart2Title').textContent;
+        y = addChart(CHART1, t1, y);
+        y = addChart(CHART2, t2, y);
+
+        // Gráficos de equipamentos (se existirem)
+        if (DADOS.equipamentos && DADOS.equipamentos.total) {
+          doc.addPage();
+          y = 20;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(13);
+          doc.setTextColor(13, 27, 42);
+          doc.text('Equipamentos do Shopping', 14, y);
+          y += 8;
+          const eq = DADOS.equipamentos;
+          const eqKpis = [
+            ['Total equipamentos', eq.total],
+            ['Categorias', Object.keys(eq.byCategoria || {}).length],
+            ['Sem manutenção', eq.semManutencao],
+            ['+ 6 meses sem manut.', eq.manutMaisDeSeisMeses]
+          ];
+          doc.autoTable({
+            startY: y, head: [['Indicador', 'Valor']], body: eqKpis,
+            theme: 'striped', styles: { fontSize: 9 },
+            headStyles: { fillColor: [230, 126, 34], textColor: 255 }
+          });
+          y = doc.lastAutoTable.finalY + 8;
+          y = addChart(CHART_EQUIP_CAT, 'Equipamentos por categoria', y);
+          y = addChart(CHART_EQUIP_TIPO, 'Equipamentos por piso', y);
+        }
+
         // Tabela principal
+        doc.addPage();
+        y = 20;
         const visible = DADOS.tipoContrato === 'A'
           ? ['LUC','LOJAS','PISO','STATUS','POSSUI MÓDULO','INTERLIGADA']
           : ['POINT NAME','DEVICE TYPE','CENTRAL','VISITA','DATA MANUTENÇÃO'];
@@ -654,7 +766,7 @@
           doc.setPage(i);
           doc.setFontSize(7);
           doc.setTextColor(100, 116, 139);
-          doc.text('© 2026 CLTECH Fire · LGPD Lei 13.709/2018 · Dados técnicos · Acesso restrito', pageW / 2, 290, { align: 'center' });
+          doc.text('© 2026 GestorPrev · CLTECH Fire · LGPD Lei 13.709/2018 · Dados técnicos · Acesso restrito', pageW / 2, 290, { align: 'center' });
           doc.text('Página ' + i + ' / ' + pages, pageW - 14, 290, { align: 'right' });
         }
 

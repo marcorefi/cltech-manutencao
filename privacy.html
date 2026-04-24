@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de Privacidade · GestorPrev</title>
+  <link rel="icon" href="assets/img/cltech-shield.png" type="image/png">
+  <link rel="stylesheet" href="assets/css/style.css?v=3">
+  <style>
+    .privacy-wrap { max-width: 800px; margin: 40px auto; padding: 0 20px 60px; }
+    .privacy-wrap h1 { font-size: 22px; color: var(--dark); margin-bottom: 4px; }
+    .privacy-wrap h2 { font-size: 15px; color: var(--dark); margin: 28px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .privacy-wrap p, .privacy-wrap li { font-size: 13px; color: var(--text); line-height: 1.7; }
+    .privacy-wrap ul { padding-left: 20px; margin: 8px 0; }
+    .privacy-wrap .badge-lgpd { display: inline-block; background: #1E40AF; color: #fff; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+    .privacy-wrap .updated { font-size: 11px; color: var(--text-muted); margin-bottom: 24px; }
+    .privacy-wrap a { color: var(--primary); }
+    .back-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--primary); text-decoration: none; margin-bottom: 24px; }
+    .back-btn:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="privacy-wrap">
+    <a href="index.html" class="back-btn">← Voltar ao sistema</a>
+
+    <h1>Política de Privacidade <span class="badge-lgpd">LGPD</span></h1>
+    <p class="updated">Última atualização: 24 de abril de 2026</p>
+
+    <h2>1. Identificação do Controlador</h2>
+    <p>
+      <strong>Razão Social:</strong> CLTECH Fire<br>
+      <strong>CNPJ:</strong> 30.452.788/0001-38<br>
+      <strong>Sistema:</strong> GestorPrev — Dashboard da Prevenção<br>
+      <strong>Contato:</strong> cltechinstalacoeseautomacao@gmail.com
+    </p>
+
+    <h2>2. Dados Coletados e Finalidade</h2>
+    <p>O GestorPrev coleta e processa exclusivamente dados técnicos necessários para a operação do sistema de gestão de manutenção de prevenção e combate a incêndio:</p>
+    <ul>
+      <li><strong>Dados de autenticação:</strong> endereço de e-mail e senha (armazenada como hash SHA-256 — nunca em texto plano) para controle de acesso ao sistema.</li>
+      <li><strong>Dados de sessão:</strong> token de sessão e data de expiração, armazenados localmente no dispositivo do usuário (localStorage) e no servidor para validação.</li>
+      <li><strong>Histórico de atividades:</strong> registro de ações realizadas no sistema (manutenções registradas, equipamentos atualizados) vinculado ao e-mail do usuário, para fins de auditoria técnica e rastreabilidade.</li>
+      <li><strong>Log de acesso:</strong> data/hora de login, logout e tentativas de acesso, para fins de segurança e conformidade LGPD.</li>
+      <li><strong>Dados técnicos de manutenção:</strong> identificadores de equipamentos, locais de instalação, datas e observações técnicas. Estes dados não contêm informações pessoais sensíveis.</li>
+    </ul>
+    <p><strong>Não coletamos:</strong> dados biométricos, dados de saúde, dados financeiros, localização GPS, ou qualquer outro dado pessoal sensível conforme Art. 5º, II da LGPD.</p>
+
+    <h2>3. Base Legal (Art. 7º da LGPD)</h2>
+    <ul>
+      <li><strong>Legítimo interesse (Art. 7º, IX):</strong> manutenção de registros de acesso para segurança do sistema.</li>
+      <li><strong>Execução de contrato (Art. 7º, V):</strong> dados necessários para prestação do serviço de gestão de manutenção.</li>
+      <li><strong>Consentimento (Art. 7º, I):</strong> uso de armazenamento local (localStorage) para autenticação.</li>
+    </ul>
+
+    <h2>4. Armazenamento e Segurança</h2>
+    <ul>
+      <li>Os dados são armazenados em <strong>Google Sheets</strong> (Google Workspace), sujeito às políticas de proteção de dados do Google.</li>
+      <li>Senhas são armazenadas exclusivamente como <strong>hash SHA-256</strong> — nunca em texto claro.</li>
+      <li>Tokens de sessão são assinados com <strong>HMAC-SHA256</strong>, impedindo falsificação.</li>
+      <li>O sistema aplica <strong>bloqueio automático</strong> após 5 tentativas de login malsucedidas em 15 minutos.</li>
+      <li>Sessões expiram automaticamente em <strong>8 horas</strong>.</li>
+      <li>Comunicação entre cliente e servidor via <strong>HTTPS</strong>.</li>
+    </ul>
+
+    <h2>5. Compartilhamento de Dados</h2>
+    <p>Os dados não são compartilhados com terceiros, exceto:</p>
+    <ul>
+      <li><strong>Google LLC</strong> — como provedor de infraestrutura (Google Workspace / Apps Script / Drive), nos termos do contrato de processamento de dados do Google.</li>
+    </ul>
+
+    <h2>6. Direitos do Titular (Art. 18 da LGPD)</h2>
+    <p>O titular dos dados tem direito a:</p>
+    <ul>
+      <li><strong>Confirmação e acesso</strong> — solicitar confirmação da existência de tratamento e acesso aos seus dados. Use a função <em>Meus Dados</em> no painel de configurações.</li>
+      <li><strong>Correção</strong> — solicitar correção de dados incompletos ou incorretos ao administrador do sistema.</li>
+      <li><strong>Anonimização ou exclusão</strong> — solicitar a exclusão de dados. A solicitação será processada em até 15 dias úteis.</li>
+      <li><strong>Portabilidade</strong> — exportar seus dados em formato estruturado pela função <em>Exportar Meus Dados</em>.</li>
+      <li><strong>Revogação do consentimento</strong> — a qualquer momento, pela função <em>Revogar Consentimento</em> no sistema, ou pelo contato do controlador.</li>
+      <li><strong>Petição à ANPD</strong> — em caso de descumprimento, o titular pode peticionar à Autoridade Nacional de Proteção de Dados (anpd.gov.br).</li>
+    </ul>
+    <p>Para exercer seus direitos, acesse o painel do sistema ou entre em contato: <strong>cltechinstalacoeseautomacao@gmail.com</strong></p>
+
+    <h2>7. Retenção dos Dados</h2>
+    <ul>
+      <li><strong>Sessões:</strong> excluídas automaticamente ao expirar ou ao efetuar logout.</li>
+      <li><strong>Histórico técnico:</strong> mantido pelo período contratual para fins de rastreabilidade de manutenção.</li>
+      <li><strong>Log de auditoria:</strong> mantido por 12 meses para fins de segurança, depois anonimizado.</li>
+    </ul>
+
+    <h2>8. Encarregado de Dados (DPO)</h2>
+    <p>
+      Responsável pelo tratamento de dados: <strong>Marcos Lima</strong><br>
+      Contato: cltechinstalacoeseautomacao@gmail.com
+    </p>
+
+    <h2>9. Atualizações desta Política</h2>
+    <p>Esta política pode ser atualizada. A data de última atualização é exibida no início do documento. O uso continuado do sistema após alterações implica aceitação da versão vigente.</p>
+
+    <div class="lgpd-footer" style="margin-top:40px">
+      <strong>© 2026 GestorPrev</strong> — CLTECH Fire · CNPJ: 30.452.788/0001-38<br>
+      Sistema em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).
+    </div>
+  </div>
+
+  <script src="assets/js/config.js?v=3"></script>
+  <script src="assets/js/lgpd.js?v=3"></script>
+</body>
+</html>

@@ -76,6 +76,21 @@ html, body {
 }
 .header button.logout:hover { background: rgba(255,255,255,0.2); }
 
+/* Botão home no header */
+.header-btn {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: none;
+  display: inline-block;
+  line-height: 1.2;
+}
+.header-btn:hover { background: rgba(255,255,255,0.2); }
+
 /* Sino de notificações */
 .bell-btn {
   background: transparent;
@@ -471,6 +486,78 @@ tbody tr.clickable { cursor: pointer; }
   font-size: 14px;
 }
 .search-box .icon { position: absolute; right: 14px; top: 12px; color: var(--text-muted); }
+
+/* ================= CONTRATO CARDS (supervisor) ================= */
+.contrato-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.contrato-card {
+  display: block;
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 18px;
+  text-decoration: none;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  border-top: 4px solid var(--primary);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.contrato-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.contrato-ico { font-size: 28px; margin-bottom: 8px; }
+.contrato-nome { font-weight: 700; font-size: 16px; color: var(--dark); margin-bottom: 6px; }
+.contrato-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11px; margin-bottom: 10px; align-items: center; }
+.badge-servico { background: var(--primary); color: #fff; padding: 3px 9px; border-radius: 10px; font-weight: 600; font-size: 10px; letter-spacing: 0.3px; }
+.contrato-tipo { color: var(--text-muted); }
+.contrato-cta { font-size: 12px; color: var(--primary); font-weight: 600; margin-top: 4px; }
+
+/* Config grid — cards clicáveis de config */
+.config-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  margin-top: 8px;
+}
+.config-card {
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.config-card:hover { background: #fff; border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow); }
+.config-ico { font-size: 26px; margin-bottom: 8px; }
+.config-title { font-weight: 700; font-size: 14px; color: var(--dark); margin-bottom: 4px; }
+.config-desc { font-size: 12px; color: var(--text-muted); line-height: 1.35; }
+
+/* Menu Campo — cards grandes com ícone para interface de campo */
+.menu-campo-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  margin-top: 8px;
+}
+.menu-campo-card {
+  background: #fff;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 14px;
+  cursor: pointer;
+  text-align: center;
+  font-family: inherit;
+  text-decoration: none;
+  color: var(--text);
+  transition: all 0.15s;
+  display: block;
+}
+.menu-campo-card:hover { border-color: var(--primary); transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.menu-campo-ico { font-size: 40px; margin-bottom: 10px; }
+.menu-campo-title { font-weight: 700; font-size: 15px; color: var(--dark); margin-bottom: 4px; }
+.menu-campo-desc { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
 
 /* ================= MOBILE NAV ================= */
 .mobile-nav {

@@ -153,6 +153,12 @@ function handleRequest(e, method) {
       case 'historico':
         result = handleHistorico(data);
         break;
+      case 'listarEquipamentosShopping':
+        result = handleListarEquipamentosShopping(data);
+        break;
+      case 'salvarEquipamento':
+        result = handleSalvarEquipamento(data);
+        break;
       default:
         result = { ok: false, error: 'Ação desconhecida: ' + action };
     }
@@ -1194,6 +1200,129 @@ function dashboardTipoB(contrato, headers, rows) {
     byDevice: byDevice,
     headers: headers
   };
+}
+
+// ========================================================================
+// TIPO A - EQUIPAMENTOS SHOPPING (Áreas comuns)
+// ========================================================================
+
+function handleListarEquipamentosShopping(data) {
+  const session = validateToken(data.token);
+  if (!session.ok) return session;
+
+  const contrato = findContrato(data.contratoId || 'shopping-parangaba');
+  if (!contrato) return { ok: false, error: 'Contrato não encontrado' };
+
+  const ss = SpreadsheetApp.openById(contrato.planilhaId);
+  const sheet = ss.getSheetByName('EQUIP SHOPPING');
+  if (!sheet) return { ok: false, error: 'Aba EQUIP SHOPPING não encontrada' };
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return { ok: true, headers: values[0] || [], equipamentos: [] };
+
+  const headers = values[0];
+  const localIdx = headers.indexOf('LOCAL DE INSTALAÇÃO');
+  const pisoIdx = headers.indexOf('PISO');
+  const tipoIdx = headers.indexOf('TIPO DISP');
+  const idIdx = headers.indexOf('ID');
+  const dataIdx = headers.indexOf('DATA MANUT.');
+  const obsIdx = headers.findIndex(function(h) { return String(h).toUpperCase().indexOf('OBS') === 0; });
+
+  const equipamentos = [];
+  let categoriaAtual = '';
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    const local = String(r[localIdx] || '').trim();
+    const piso = String(r[pisoIdx] || '').trim();
+    if (local && !piso && !r[tipoIdx]) {
+      categoriaAtual = local;
+      continue;
+    }
+    if (!local) continue;
+    equipamentos.push({
+      _row: i + 1,
+      local: local,
+      piso: piso,
+      tipo: String(r[tipoIdx] || '').trim(),
+      id: String(r[idIdx] || '').trim(),
+      data: r[dataIdx],
+      obs: obsIdx >= 0 ? String(r[obsIdx] || '').trim() : '',
+      categoria: categoriaAtual
+    });
+  }
+
+  return { ok: true, headers: headers, equipamentos: equipamentos };
+}
+
+function handleSalvarEquipamento(data) {
+  const session = validateToken(data.token);
+  const perm = requirePerfil(session, ['supervisor', 'gestao', 'campo']);
+  if (!perm.ok) return perm;
+
+  const contrato = findContrato(data.contratoId || 'shopping-parangaba');
+  if (!contrato) return { ok: false, error: 'Contrato não encontrado' };
+
+  const ss = SpreadsheetApp.openById(contrato.planilhaId);
+  const sheet = ss.getSheetByName('EQUIP SHOPPING');
+  if (!sheet) return { ok: false, error: 'Aba EQUIP SHOPPING não encontrada' };
+
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const localIdx = headers.indexOf('LOCAL DE INSTALAÇÃO');
+  const idIdx = headers.indexOf('ID');
+
+  const alvoLocal = String(data.localInstalacao || '').trim();
+  const alvoId = String(data.equipamentoId || '').trim();
+
+  // Localizar linha: primeiro por ID exato (se houver), depois por LOCAL DE INSTALAÇÃO
+  let targetRow = -1;
+  for (let i = 1; i < values.length; i++) {
+    const local = String(values[i][localIdx] || '').trim();
+    const id = idIdx >= 0 ? String(values[i][idIdx] || '').trim() : '';
+    if (alvoId && id && id === alvoId && local === alvoLocal) { targetRow = i + 1; break; }
+  }
+  // Fallback: só pelo local (linhas sem ID)
+  if (targetRow === -1) {
+    for (let i = 1; i < values.length; i++) {
+      const local = String(values[i][localIdx] || '').trim();
+      if (local === alvoLocal) { targetRow = i + 1; break; }
+    }
+  }
+
+  if (targetRow === -1) return { ok: false, error: 'Equipamento não encontrado: ' + alvoLocal };
+
+  const campos = data.campos || {};
+  const alteracoes = [];
+  Object.keys(campos).forEach(function(campo) {
+    const colIdx = headers.indexOf(campo);
+    if (colIdx !== -1) {
+      const antigo = sheet.getRange(targetRow, colIdx + 1).getValue();
+      const novo = campos[campo];
+      if (String(antigo) !== String(novo)) {
+        sheet.getRange(targetRow, colIdx + 1).setValue(novo);
+        alteracoes.push({ campo: campo, de: antigo, para: novo });
+      }
+    }
+  });
+
+  // Foto (se enviada)
+  let fotoUrl = '';
+  if (data.foto && data.foto.base64) {
+    const up = uploadFotoInternal(contrato, alvoId || alvoLocal, data.foto);
+    if (up.ok) fotoUrl = up.url;
+  }
+
+  // Histórico (quem alterou, quando, o que)
+  registrarHistorico({
+    contratoId: contrato.id,
+    identificador: alvoId || alvoLocal,
+    tecnico: session.email,
+    acao: 'atualizar_equipamento',
+    dados: JSON.stringify({ local: alvoLocal, alteracoes: alteracoes, observacao: campos['OBS'] || '' }),
+    fotoUrl: fotoUrl
+  });
+
+  return { ok: true, alteracoes: alteracoes, fotoUrl: fotoUrl };
 }
 
 // ========================================================================
