@@ -1,9 +1,9 @@
-﻿// GestorPrev - Cliente da API (Apps Script Web App)
+﻿// GestorPrev - Cliente da API (Vercel Serverless / Node.js)
 // Uso: API.call('auth', { email, senha }) => Promise<Result>
 
 window.API = (function() {
   function getUrl() {
-    return window.APP_CONFIG.API_URL || localStorage.getItem('gestorprev_api_url') || '';
+    return localStorage.getItem('gestorprev_api_url') || window.APP_CONFIG.API_URL || '/api';
   }
 
   function setUrl(url) {
@@ -11,15 +11,17 @@ window.API = (function() {
     window.APP_CONFIG.API_URL = url;
   }
 
-  async function doFetch(url, body, timeoutMs) {
+  async function doFetch(url, body, timeoutMs, token) {
     const ctrl = new AbortController();
     const timer = setTimeout(function() { ctrl.abort(); }, timeoutMs || 30000);
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
       const res = await fetch(url, {
         method: 'POST',
         mode: 'cors',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        credentials: 'omit',
+        headers: headers,
         body: JSON.stringify(body),
         signal: ctrl.signal
       });
@@ -50,8 +52,9 @@ window.API = (function() {
     payload = payload || {};
 
     const session = window.AUTH && window.AUTH.getSession();
-    if (session && session.token && !payload.token) {
-      payload.token = session.token;
+    const token = session && session.token;
+    if (token && !payload.token) {
+      payload.token = token;
     }
 
     const body = Object.assign({ action: action }, payload);
@@ -70,7 +73,7 @@ window.API = (function() {
     let lastErr;
     for (let tentativa = 1; tentativa <= 2; tentativa++) {
       try {
-        const res = await doFetch(url, body, 30000);
+        const res = await doFetch(url, body, 30000, token);
         const text = res.text;
         let json;
         try {

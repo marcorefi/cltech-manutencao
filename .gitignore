@@ -4,3 +4,19 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# Secrets / env
+.env
+.env.local
+.env.*.local
+*.env
+
+# Node / Vercel
+node_modules/
+.vercel/
+.next/
+
+# Migration artifacts
+db/migrations/.applied
+*.dump.sql
+
